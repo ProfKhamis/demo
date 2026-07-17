@@ -1027,12 +1027,16 @@ function handleContractUpdate(contract) {
     logToConsole(`[Stream] Contract ${contract.contract_id} \u2192 status: ${contract.status ?? 'n/a'}, profit: ${contract.profit ?? 'n/a'}, is_expired: ${contract.is_expired ?? 'n/a'}`, "system-msg");
 
     if (contract.status === "won" || contract.status === "lost") {
-        if (contract.passthrough?.bulkRunId?.startsWith("BULK_TN_")) {
+        if (contract.passthrough?.bulkRunId?.startsWith("BULK_MD_")) {
             if (isAutoModeTN && totalTradesExecutedTN < parseInt(maxTradesTN.value)) {
-                setTimeout(executeBulkTouchNoTouch, 1000);
+                setTimeout(executeBulkMatchesDiffers, 1000);
             } else if (isAutoModeTN) {
-                logToConsole("Max Touch/No Touch runs reached.");
+                logToConsole("Max Matches/Differs runs reached.");
                 isAutoModeTN = false;
+                if (btnToggleAutoTN) {
+                    btnToggleAutoTN.textContent = "Auto Bulk Mode";
+                    btnToggleAutoTN.classList.remove('stream-active');
+                }
             }
         }
     }
@@ -1140,13 +1144,13 @@ function toggleAutoOU(state) {
 const btnBuyTN = document.getElementById("btn-buy-tn");
 const btnToggleAutoTN = document.getElementById("btn-toggle-auto-tn");
 const tradeStakeTN = document.getElementById("trade-stake-tn");
-const tradeBarrierTN = document.getElementById("trade-barrier-tn");
+const tradeDigitTN = document.getElementById("trade-digit-tn");
 const maxTradesTN = document.getElementById("max-trades-tn");
 
 let isAutoModeTN = false;
 let totalTradesExecutedTN = 0;
 
-function executeBulkTouchNoTouch() {
+function executeBulkMatchesDiffers() {
 
     if (isChallengeLocked()) {
         logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
@@ -1160,10 +1164,9 @@ function executeBulkTouchNoTouch() {
     }
 
     const stake = parseFloat(tradeStakeTN.value);
-    const barrierValue = parseFloat(tradeBarrierTN.value);
-    const barrierStr = (barrierValue >= 0 ? "+" : "") + barrierValue.toFixed(3); 
+    const digitStr = parseInt(tradeDigitTN.value, 10).toString();
     const duration = parseInt(document.getElementById("trade-duration-tn").value) || 5;
-    const bulkRunToken = "BULK_TN_" + Date.now();
+    const bulkRunToken = "BULK_MD_" + Date.now();
     challengeBatchExpectedCounts[bulkRunToken] = 2;
 
     const baseParams = {
@@ -1173,14 +1176,14 @@ function executeBulkTouchNoTouch() {
         "duration": duration,
         "duration_unit": "t",
         "underlying_symbol": marketDropdown.value,
-        "barrier": barrierStr
+        "barrier": digitStr
     };
 
     optionsWebSocket.send(JSON.stringify({
         "buy": 1,
         "price": stake,
         "subscribe": 1,
-        "parameters": { ...baseParams, "contract_type": "ONETOUCH" },
+        "parameters": { ...baseParams, "contract_type": "DIGITMATCH" },
         "passthrough": { "bulkRunId": bulkRunToken }
     }));
 
@@ -1188,19 +1191,38 @@ function executeBulkTouchNoTouch() {
         "buy": 1,
         "price": stake,
         "subscribe": 1,
-        "parameters": { ...baseParams, "contract_type": "NOTOUCH" },
+        "parameters": { ...baseParams, "contract_type": "DIGITDIFF" },
         "passthrough": { "bulkRunId": bulkRunToken }
     }));
 
     totalTradesExecutedTN += 2;
-    logToConsole(`[TN] Sent pair batch. Barrier: ${barrierStr}, Dur: ${duration}`);
+    logToConsole(`[Matches/Differs] Sent pair batch. Digit: ${digitStr}, Dur: ${duration}`, "success-msg");
 }
 
 if (btnBuyTN) {
-    btnBuyTN.addEventListener("click", executeBulkTouchNoTouch);
+    btnBuyTN.addEventListener("click", executeBulkMatchesDiffers);
     console.log("Event listener attached successfully to btn-buy-tn");
 } else {
     console.error("CRITICAL: btn-buy-tn not found in the DOM!");
+}
+
+if (btnToggleAutoTN) {
+    btnToggleAutoTN.addEventListener("click", () => {
+        if (!isAutoModeTN && isChallengeLocked()) {
+            logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+            return;
+        }
+        isAutoModeTN = !isAutoModeTN;
+        btnToggleAutoTN.textContent = isAutoModeTN ? "Stop Auto Bulk Mode" : "Auto Bulk Mode";
+        btnToggleAutoTN.classList.toggle('stream-active', isAutoModeTN);
+        if (isAutoModeTN) {
+            totalTradesExecutedTN = 0;
+            logToConsole(`[Matches/Differs] Auto Bulk Mode started. Cap Target: ${maxTradesTN.value} total trades.`, "success-msg");
+            executeBulkMatchesDiffers();
+        } else {
+            logToConsole("[Matches/Differs] Auto Bulk Mode stopped by user request.");
+        }
+    });
 }
 
 document.getElementById("btn-reset-balance").addEventListener("click", () => {
