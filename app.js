@@ -1108,6 +1108,7 @@ function handleContractUpdate(contract) {
             totalSessionProfit += profitValue;
             updateSessionProfitUI();
             checkTPSLHit();
+            showPnlToast(totalSessionProfit);
         }
     }
 
@@ -1308,6 +1309,33 @@ function logToConsole(message, className = "") {
     p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
     logConsole.appendChild(p);
     logConsole.scrollTop = logConsole.scrollHeight;
+}
+
+const pnlToastContainer = document.getElementById('pnl-toast-container');
+function showPnlToast(totalValue) {
+    if (!pnlToastContainer) return;
+    const isWin = totalValue >= 0;
+
+    const existing = pnlToastContainer.querySelector('.pnl-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `pnl-toast ${isWin ? 'pnl-toast-win' : 'pnl-toast-loss'}`;
+    toast.innerHTML = `
+        <div class="pnl-toast-icon">${isWin ? '\u2713' : '\u2715'}</div>
+        <div class="pnl-toast-body">
+            <div class="pnl-toast-title">${isWin ? 'Total Profit' : 'Total Loss'}</div>
+            <div class="pnl-toast-amount">${isWin ? '+' : ''}${totalValue.toFixed(2)}</div>
+        </div>
+    `;
+    pnlToastContainer.appendChild(toast);
+
+    requestAnimationFrame(() => toast.classList.add('pnl-toast-visible'));
+
+    setTimeout(() => {
+        toast.classList.remove('pnl-toast-visible');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
 }
 
 // CHALLENGE 
