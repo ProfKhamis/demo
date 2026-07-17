@@ -1108,7 +1108,7 @@ function handleContractUpdate(contract) {
             totalSessionProfit += profitValue;
             updateSessionProfitUI();
             checkTPSLHit();
-            showPnlToast(totalSessionProfit);
+            showPnlToast(calculateLedgerTotal());
         }
     }
 
@@ -1309,6 +1309,17 @@ function logToConsole(message, className = "") {
     p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
     logConsole.appendChild(p);
     logConsole.scrollTop = logConsole.scrollHeight;
+}
+
+function calculateLedgerTotal() {
+    let total = 0;
+    document.querySelectorAll('#ledger-body .row-profit-loss').forEach(cell => {
+        const text = cell.textContent.trim();
+        if (!text || text === '--.--') return;
+        const numeric = parseFloat(text.replace(/[^0-9.+-]/g, ''));
+        if (!isNaN(numeric)) total += numeric;
+    });
+    return total;
 }
 
 const pnlToastContainer = document.getElementById('pnl-toast-container');
