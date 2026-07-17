@@ -95,7 +95,7 @@ let isAutoTradingPOU = false;
 let totalTradesExecutedPOU = 0;
 let patternCooldown = false;
 let recentDigitHistory = []; 
-let digitFrequencyWindow = []; // rolling window for Matches/Differs auto-predict (hot digit)
+let digitFrequencyWindow = []; // rolling window for Differs auto-predict (hot digit)
 const HOT_DIGIT_WINDOW_SIZE = 20;
 
 function getHotDigit() {
@@ -1047,11 +1047,11 @@ function handleContractUpdate(contract) {
     logToConsole(`[Stream] Contract ${contract.contract_id} \u2192 status: ${contract.status ?? 'n/a'}, profit: ${contract.profit ?? 'n/a'}, is_expired: ${contract.is_expired ?? 'n/a'}`, "system-msg");
 
     if (contract.status === "won" || contract.status === "lost") {
-        if (contract.passthrough?.bulkRunId?.startsWith("BULK_MD_")) {
+        if (contract.passthrough?.bulkRunId?.startsWith("BULK_DIFF_")) {
             if (isAutoModeTN && totalTradesExecutedTN < parseInt(maxTradesTN.value)) {
-                setTimeout(executeBulkMatchesDiffers, 1000);
+                setTimeout(executeBulkDiffers, 1000);
             } else if (isAutoModeTN) {
-                logToConsole("Max Matches/Differs runs reached.");
+                logToConsole("Max Differs runs reached.");
                 isAutoModeTN = false;
                 if (btnToggleAutoTN) {
                     btnToggleAutoTN.textContent = "Auto Bulk Mode";
@@ -1179,7 +1179,7 @@ if (autoPredictTN) {
     });
 }
 
-function executeBulkMatchesDiffers() {
+function executeBulkDiffers() {
 
     if (isChallengeLocked()) {
         logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
@@ -1197,18 +1197,18 @@ function executeBulkMatchesDiffers() {
     if (autoPredictTN && autoPredictTN.checked) {
         const hotDigit = getHotDigit();
         if (hotDigit === null) {
-            logToConsole("[Matches/Differs] Not enough tick history yet to predict a digit. Waiting for more ticks.", "error-msg");
+            logToConsole("[Differs] Not enough tick history yet to predict a digit. Waiting for more ticks.", "error-msg");
             return;
         }
         digitStr = hotDigit.toString();
         if (predictedDigitTNDisplay) predictedDigitTNDisplay.value = digitStr;
-        logToConsole(`[Matches/Differs] Auto-predicted digit ${digitStr} (hottest over last ${digitFrequencyWindow.length} ticks).`, "system-msg");
+        logToConsole(`[Differs] Auto-predicted digit ${digitStr} (hottest over last ${digitFrequencyWindow.length} ticks).`, "system-msg");
     } else {
         digitStr = parseInt(tradeDigitTN.value, 10).toString();
     }
     const duration = parseInt(document.getElementById("trade-duration-tn").value) || 5;
-    const bulkRunToken = "BULK_MD_" + Date.now();
-    challengeBatchExpectedCounts[bulkRunToken] = 2;
+    const bulkRunToken = "BULK_DIFF_" + Date.now();
+    challengeBatchExpectedCounts[bulkRunToken] = 1;
 
     const baseParams = {
         "amount": stake,
@@ -1224,24 +1224,17 @@ function executeBulkMatchesDiffers() {
         "buy": 1,
         "price": stake,
         "subscribe": 1,
-        "parameters": { ...baseParams, "contract_type": "DIGITMATCH" },
-        "passthrough": { "bulkRunId": bulkRunToken }
-    }));
-
-    optionsWebSocket.send(JSON.stringify({
-        "buy": 1,
-        "price": stake,
-        "subscribe": 1,
         "parameters": { ...baseParams, "contract_type": "DIGITDIFF" },
         "passthrough": { "bulkRunId": bulkRunToken }
     }));
 
-    totalTradesExecutedTN += 2;
-    logToConsole(`[Matches/Differs] Sent pair batch. Digit: ${digitStr}, Dur: ${duration}`, "success-msg");
+    totalTradesExecutedTN += 1;
+    logToConsole(`[Differs] Sent Differ contract. Digit: ${digitStr}, Dur: ${duration}`, "success-msg");
 }
 
+
 if (btnBuyTN) {
-    btnBuyTN.addEventListener("click", executeBulkMatchesDiffers);
+    btnBuyTN.addEventListener("click", executeBulkDiffers);
     console.log("Event listener attached successfully to btn-buy-tn");
 } else {
     console.error("CRITICAL: btn-buy-tn not found in the DOM!");
@@ -1258,10 +1251,10 @@ if (btnToggleAutoTN) {
         btnToggleAutoTN.classList.toggle('stream-active', isAutoModeTN);
         if (isAutoModeTN) {
             totalTradesExecutedTN = 0;
-            logToConsole(`[Matches/Differs] Auto Bulk Mode started. Cap Target: ${maxTradesTN.value} total trades.`, "success-msg");
-            executeBulkMatchesDiffers();
+            logToConsole(`[Differs] Auto Bulk Mode started. Cap Target: ${maxTradesTN.value} total trades.`, "success-msg");
+            executeBulkDiffers();
         } else {
-            logToConsole("[Matches/Differs] Auto Bulk Mode stopped by user request.");
+            logToConsole("[Differs] Auto Bulk Mode stopped by user request.");
         }
     });
 }
