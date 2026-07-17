@@ -164,7 +164,7 @@
             <button class="tab-btn active" data-target="tab-even-odd">Digit Even/Odd</button>
             <button class="tab-btn" data-target="tab-bulk-ou">Bulk Over/Under</button>
             <button class="tab-btn" data-target="tab-bulk-eo">Bulk Even/Odd</button>
-            <button class="tab-btn" data-target="tab-bulk-tn">Bulk Touch/No Touch</button>
+            <button class="tab-btn" data-target="tab-bulk-tn">Matches/Differs</button>
             <button class="tab-btn" data-target="tab-pattern-ou">Pattern Over/Under</button>
         </div>
 
@@ -199,6 +199,38 @@
     <div style="display: flex; gap: 10px; margin-top: 14px;">
         <button id="btn-buy-beo" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Buy EO Pair Manually</button>
         <button id="btn-toggle-auto-beo" class="btn-secondary" style="flex: 1;">Auto Bulk Mode</button>
+    </div>
+</section>
+<section class="card tab-content" id="tab-bulk-tn">
+    <h3>Matches/Differs Execution</h3>
+    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
+        Fires a Matches and a Differs contract simultaneously on the same tick, both using the same digit.
+    </p>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Stake (Per Trade):</label>
+            <input type="number" id="trade-stake-tn" value="5.00" min="0.50" step="0.50">
+        </div>
+        <div class="form-group">
+            <label>Duration (Ticks):</label>
+            <input type="number" id="trade-duration-tn" value="1" min="1" max="10">
+        </div>
+        <div class="form-group">
+            <label>Digit (0-9):</label>
+            <input type="number" id="trade-digit-tn" value="5" min="0" max="9">
+        </div>
+    </div>
+    <div class="form-row" style="margin-top: 10px;">
+        <div class="form-group">
+            <label>Max Trades Run Cap:</label>
+            <input type="number" id="max-trades-tn" value="10" min="2" max="100"
+                title="Total cumulative trades to run before auto-stopping">
+        </div>
+    </div>
+    <div style="display: flex; gap: 10px; margin-top: 14px;">
+        <button id="btn-buy-tn" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Buy
+            Match/Differ Pair Manually</button>
+        <button id="btn-toggle-auto-tn" class="btn-secondary" style="flex: 1;">Auto Bulk Mode</button>
     </div>
 </section>
         <section class="card tab-content active" id="tab-even-odd">
