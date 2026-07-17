@@ -1207,8 +1207,9 @@ function executeBulkDiffers() {
         digitStr = parseInt(tradeDigitTN.value, 10).toString();
     }
     const duration = parseInt(document.getElementById("trade-duration-tn").value) || 5;
+    const batchSize = parseInt(maxTradesTN.value, 10) || 1; // Max Trades Cap doubles as "repeat this many times on this same tick", same pattern as Bulk Over/Under
     const bulkRunToken = "BULK_DIFF_" + Date.now();
-    challengeBatchExpectedCounts[bulkRunToken] = 1;
+    challengeBatchExpectedCounts[bulkRunToken] = batchSize;
 
     const baseParams = {
         "amount": stake,
@@ -1220,16 +1221,18 @@ function executeBulkDiffers() {
         "barrier": digitStr
     };
 
-    optionsWebSocket.send(JSON.stringify({
-        "buy": 1,
-        "price": stake,
-        "subscribe": 1,
-        "parameters": { ...baseParams, "contract_type": "DIGITDIFF" },
-        "passthrough": { "bulkRunId": bulkRunToken }
-    }));
+    for (let i = 0; i < batchSize; i++) {
+        optionsWebSocket.send(JSON.stringify({
+            "buy": 1,
+            "price": stake,
+            "subscribe": 1,
+            "parameters": { ...baseParams, "contract_type": "DIGITDIFF" },
+            "passthrough": { "bulkRunId": bulkRunToken }
+        }));
+    }
 
-    totalTradesExecutedTN += 1;
-    logToConsole(`[Differs] Sent Differ contract. Digit: ${digitStr}, Dur: ${duration}`, "success-msg");
+    totalTradesExecutedTN += batchSize;
+    logToConsole(`[Differs] Fired ${batchSize} Differ ${digitStr} contracts on this tick.`, "success-msg");
 }
 
 
@@ -1251,7 +1254,7 @@ if (btnToggleAutoTN) {
         btnToggleAutoTN.classList.toggle('stream-active', isAutoModeTN);
         if (isAutoModeTN) {
             totalTradesExecutedTN = 0;
-            logToConsole(`[Differs] Auto Bulk Mode started. Cap Target: ${maxTradesTN.value} total trades.`, "success-msg");
+            logToConsole(`[Differs] Auto Bulk Mode started. Will fire ${maxTradesTN.value} Differ contracts on the next qualifying tick, then auto-stop.`, "success-msg");
             executeBulkDiffers();
         } else {
             logToConsole("[Differs] Auto Bulk Mode stopped by user request.");
