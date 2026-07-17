@@ -95,6 +95,19 @@ let isAutoTradingPOU = false;
 let totalTradesExecutedPOU = 0;
 let patternCooldown = false;
 let recentDigitHistory = []; 
+let digitFrequencyWindow = []; // rolling window for Matches/Differs auto-predict (hot digit)
+const HOT_DIGIT_WINDOW_SIZE = 20;
+
+function getHotDigit() {
+    if (digitFrequencyWindow.length === 0) return null;
+    const counts = new Array(10).fill(0);
+    digitFrequencyWindow.forEach(d => counts[d]++);
+    let hotDigit = 0;
+    for (let d = 1; d <= 9; d++) {
+        if (counts[d] > counts[hotDigit]) hotDigit = d;
+    }
+    return hotDigit;
+}
 
 const DIGIT_PATTERNS = [
     { digits: [1, 2], contract_type: 'DIGITOVER', barrier: '2', label: 'Over 2 (1\u2194 2 pattern)' },
@@ -679,6 +692,13 @@ function handleIncomingTickPacket(tickData) {
     recentDigitHistory.push(lastDigit);
     if (recentDigitHistory.length > 2) recentDigitHistory.shift();
 
+    digitFrequencyWindow.push(lastDigit);
+    if (digitFrequencyWindow.length > HOT_DIGIT_WINDOW_SIZE) digitFrequencyWindow.shift();
+    if (predictedDigitTNDisplay && autoPredictTN && autoPredictTN.checked) {
+        const hotDigit = getHotDigit();
+        predictedDigitTNDisplay.value = hotDigit === null ? '--' : hotDigit;
+    }
+
     let patternFired = false;
     let stopAutoPOU = false;
     let patternMatch = null;
@@ -1146,9 +1166,18 @@ const btnToggleAutoTN = document.getElementById("btn-toggle-auto-tn");
 const tradeStakeTN = document.getElementById("trade-stake-tn");
 const tradeDigitTN = document.getElementById("trade-digit-tn");
 const maxTradesTN = document.getElementById("max-trades-tn");
+const autoPredictTN = document.getElementById("auto-predict-tn");
+const predictedDigitTNDisplay = document.getElementById("predicted-digit-tn-display");
 
 let isAutoModeTN = false;
 let totalTradesExecutedTN = 0;
+
+if (autoPredictTN) {
+    autoPredictTN.addEventListener('change', () => {
+        tradeDigitTN.disabled = autoPredictTN.checked;
+        if (!autoPredictTN.checked && predictedDigitTNDisplay) predictedDigitTNDisplay.value = '--';
+    });
+}
 
 function executeBulkMatchesDiffers() {
 
@@ -1164,7 +1193,19 @@ function executeBulkMatchesDiffers() {
     }
 
     const stake = parseFloat(tradeStakeTN.value);
-    const digitStr = parseInt(tradeDigitTN.value, 10).toString();
+    let digitStr;
+    if (autoPredictTN && autoPredictTN.checked) {
+        const hotDigit = getHotDigit();
+        if (hotDigit === null) {
+            logToConsole("[Matches/Differs] Not enough tick history yet to predict a digit. Waiting for more ticks.", "error-msg");
+            return;
+        }
+        digitStr = hotDigit.toString();
+        if (predictedDigitTNDisplay) predictedDigitTNDisplay.value = digitStr;
+        logToConsole(`[Matches/Differs] Auto-predicted digit ${digitStr} (hottest over last ${digitFrequencyWindow.length} ticks).`, "system-msg");
+    } else {
+        digitStr = parseInt(tradeDigitTN.value, 10).toString();
+    }
     const duration = parseInt(document.getElementById("trade-duration-tn").value) || 5;
     const bulkRunToken = "BULK_MD_" + Date.now();
     challengeBatchExpectedCounts[bulkRunToken] = 2;
