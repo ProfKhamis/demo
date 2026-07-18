@@ -163,7 +163,7 @@
         <div class="tabs-navigation" id="section-strategies">
             <button class="tab-btn active" data-target="tab-even-odd">Digit Even/Odd</button>
             <button class="tab-btn" data-target="tab-bulk-ou">Bulk Over/Under</button>
-            <button class="tab-btn" data-target="tab-bulk-eo">Bulk Even/Odd</button>
+            <button class="tab-btn" data-target="tab-bulk-eo">Over 0 / Under 9</button>
             <button class="tab-btn" data-target="tab-bulk-tn">Differs</button>
             <button class="tab-btn" data-target="tab-pattern-ou">Pattern Over/Under</button>
         </div>
@@ -175,30 +175,38 @@
 
        <!-- STRATEGY 3:-->
 <section class="card tab-content" id="tab-bulk-eo">
-    <h3>Bulk Even/Odd Execution</h3>
+    <h3>Over 0 / Under 9 (Edge Rotation)</h3>
     <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
-        Fires both Even and Odd contracts simultaneously on the exact same tick window.
+        Watches the last 10 ticks to decide which side is currently favored (fewer recent 0s = lean Over 0, fewer recent 9s = lean Under 9), then fires the matching trade the instant that digit is actually touched. Stake compounds forward (stake + last profit/loss) after every trade, floored at your base stake so a loss can't zero it out, and capped at a multiple of base stake for safety. Runs until your Strategy Take-Profit is hit or you stop it.
     </p>
-    
-    <!-- Clean Input Form Row Grid -->
     <div class="form-row">
         <div class="form-group">
-            <label>Stake (Per Trade):</label>
-            <input type="number" id="trade-stake-beo" value="5.00" min="0.50" step="0.50">
+            <label>Base Stake:</label>
+            <input type="number" id="trade-stake-edge" value="5.00" min="0.50" step="0.50">
         </div>
         <div class="form-group">
             <label>Duration (Ticks):</label>
-            <input type="number" id="trade-duration-beo" value="1" min="1" max="10">
-        </div>
-        <div class="form-group">
-            <label>Max Trades Run Cap (I mean once it fires):</label>
-            <input type="number" id="max-trades-beo" value="10" min="2" max="100" title="Total cumulative trades to run before auto-stopping">
+            <input type="number" id="trade-duration-edge" value="1" min="1" max="10">
         </div>
     </div>
-
+    <div class="form-row" style="margin-top: 10px;">
+        <div class="form-group">
+            <label>Strategy Take-Profit ($):</label>
+            <input type="number" id="take-profit-edge" value="10.00" min="0" step="0.50"
+                title="Strategy stops itself once cumulative session profit reaches this amount">
+        </div>
+        <div class="form-group">
+            <label>Max Stake Multiplier:</label>
+            <input type="number" id="max-multiplier-edge" value="5" min="1" step="1"
+                title="If the compounded stake would exceed Base Stake x this number, it resets back to Base Stake">
+        </div>
+    </div>
+    <div id="edge-status-box" style="margin-top: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-surface); font-size: 0.82rem; color: var(--text-secondary);">
+        <strong>Status:</strong> <span id="edge-status-text">Idle</span>
+    </div>
     <div style="display: flex; gap: 10px; margin-top: 14px;">
-        <button id="btn-buy-beo" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Buy EO Pair Manually</button>
-        <button id="btn-toggle-auto-beo" class="btn-secondary" style="flex: 1;">Auto Bulk Mode</button>
+        <button id="btn-toggle-edge-rotation" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Start
+            Edge Rotation</button>
     </div>
 </section>
 <section class="card tab-content" id="tab-bulk-tn">
