@@ -34,14 +34,6 @@ const btnToggleAutoEO = document.getElementById('btn-toggle-auto-eo');
 const tradeStakeEO = document.getElementById('trade-stake-eo');
 const tradeDurationEO = document.getElementById('trade-duration-eo');
 const strategyModeEO = document.getElementById('strategy-mode-eo');
-const tradeStakeBEO = document.getElementById("trade-stake-beo");
-const tradeDurationBEO = document.getElementById("trade-duration-beo");
-const btnBuyBEO = document.getElementById("btn-buy-beo");
-const maxTradesBEO = document.getElementById("max-trades-beo");
-let totalTradesExecutedBEO = 0;
-const btnToggleAutoBEO = document.getElementById("btn-toggle-auto-beo");
-let isAutoModeBEO = false;
-let trackingSettledContractsBEO = 0;
 
 // DOM Bindings - Strategy 2 (OU)
 const btnBuyOU = document.getElementById('btn-buy-ou');
@@ -246,10 +238,10 @@ if (btnToggleTPSL) {
 function haltAllAutoModes() {
     if (isAutoTradingEO) toggleAutoEO(false);
     if (isAutoTradingOU) toggleAutoOU(false);
-    if (isAutoModeBEO) stopAutoBulkModeBEO();
     if (isAutoTradingPOU) toggleAutoPOU(false);
     if (isBulkOver2Armed) disarmBulkOver2();
     isAutoModeTN = false;
+    if (isEdgeRotationActive) stopEdgeRotation("Stopped - session TP/SL hit.");
     logToConsole("[Risk Management] All auto-trading modes halted.", "error-msg");
 }
 
@@ -430,25 +422,6 @@ btnFetch.addEventListener('click', async () => {
     } catch (e) { logToConsole(e.message, "error-msg"); }
 });
 
-if (btnBuyBEO) {
-    btnBuyBEO.addEventListener("click", executeBulkEvenOddPair);
-} else {
-    console.error("CRITICAL: btn-buy-beo not found in the DOM!");
-}
-
-btnToggleAutoBEO.addEventListener("click", () => {
-    if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
-        logToConsole("Error: Cannot start automation without an active stream link.", "error-msg");
-        return;
-    }
-
-    if (isAutoModeBEO) {
-        stopAutoBulkModeBEO();
-    } else {
-        startAutoBulkModeBEO();
-    }
-});
-
 document.getElementById("btn-clear-ledger").addEventListener("click", () => {
     const ledgerBody = document.getElementById("ledger-body");
 
@@ -493,30 +466,6 @@ function addToLedger(data) {
     ledgerBody.appendChild(row);
 }
 
-function startAutoBulkModeBEO() {
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
-        return;
-    }
-    isAutoModeBEO = true;
-    totalTradesExecutedBEO = 0; 
-    trackingSettledContractsBEO = 0;
-    
-    btnToggleAutoBEO.textContent = "Stop Auto Mode";
-    btnToggleAutoBEO.style.backgroundColor = "#ff3b30"; 
-    btnToggleAutoBEO.style.color = "#ffffff";
-    
-    logToConsole("[Auto Engine] Bulk Even/Odd Automation Started...", "success-msg");
-    executeBulkEvenOddPair();
-}
-
-function stopAutoBulkModeBEO() {
-    isAutoModeBEO = false;
-    btnToggleAutoBEO.textContent = "Start Auto Bulk Mode";
-    btnToggleAutoBEO.style.backgroundColor = ""; 
-    btnToggleAutoBEO.style.color = "";
-    logToConsole("[Auto Engine] Bulk Even/Odd Automation Stopped by user request.");
-}
 function populateDropdown(accounts) {
     dropdown.innerHTML = "";
     accounts.forEach(acc => {
@@ -699,6 +648,27 @@ function handleIncomingTickPacket(tickData) {
         predictedDigitTNDisplay.value = hotDigit === null ? '--' : hotDigit;
     }
 
+    if (isEdgeRotationActive) {
+        edgeDigitWindow.push(lastDigit);
+        if (edgeDigitWindow.length > EDGE_WINDOW_SIZE) edgeDigitWindow.shift();
+
+        if (edgeDigitWindow.length < EDGE_WINDOW_SIZE) {
+            setEdgeStatus(`Warming up - collecting starting data (${edgeDigitWindow.length}/${EDGE_WINDOW_SIZE} ticks)...`);
+        } else if (!edgeTradeInFlight) {
+            const zeroCount = edgeDigitWindow.filter(d => d === 0).length;
+            const nineCount = edgeDigitWindow.filter(d => d === 9).length;
+            const favoredSide = zeroCount <= nineCount ? 'OVER0' : 'UNDER9';
+
+            setEdgeStatus(`Watching. Favored: ${favoredSide === 'OVER0' ? 'Over 0' : 'Under 9'} (0s: ${zeroCount}, 9s: ${nineCount} in last ${EDGE_WINDOW_SIZE}). Stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}`);
+
+            if (favoredSide === 'OVER0' && lastDigit === 0) {
+                fireEdgeTrade('OVER0');
+            } else if (favoredSide === 'UNDER9' && lastDigit === 9) {
+                fireEdgeTrade('UNDER9');
+            }
+        }
+    }
+
     let patternFired = false;
     let stopAutoPOU = false;
     let patternMatch = null;
@@ -778,69 +748,6 @@ function handleIncomingTickPacket(tickData) {
 }
 
 // --- CONTRACT ORDER PLACEMENT CONTROLLERS ---
-function executeBulkEvenOddPair() {
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
-        return;
-    }
-    if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
-        logToConsole("Error: Real-time stream must be connected before running trades.", "error-msg");
-        return;
-    }
-
-    const maxCap = parseInt(maxTradesBEO.value, 10);  
-    if (totalTradesExecutedBEO + 2 > maxCap) {
-        logToConsole(`[Bulk EO] Halt: Running this pair would exceed your Max Trades Run Cap of ${maxCap}.`, "error-msg");
-        return;
-    }
-    
-    const symbol = marketDropdown.value;
-    const stake = parseFloat(tradeStakeBEO.value);
-    const duration = parseInt(tradeDurationBEO.value, 10);
-    const currency = currencyText.textContent || "USD";
-    
-    const bulkRunToken = "BULK_EO_" + Date.now();
-    challengeBatchExpectedCounts[bulkRunToken] = 2;
-
-    const payloadEven = {
-        "buy": 1,
-        "price": stake,
-        "subscribe": 1,
-        "parameters": {
-            "amount": stake,
-            "basis": "stake",
-            "contract_type": "DIGITEVEN",
-            "currency": currency,
-            "duration": duration,
-            "duration_unit": "t",
-            "underlying_symbol": symbol
-        },
-        "passthrough": { "bulkRunId": bulkRunToken }
-    };
-
-    const payloadOdd = {
-        "buy": 1,
-        "price": stake,
-        "subscribe": 1,
-        "parameters": {
-            "amount": stake,
-            "basis": "stake",
-            "contract_type": "DIGITODD",
-            "currency": currency,
-            "duration": duration,
-            "duration_unit": "t",
-            "underlying_symbol": symbol
-        },
-        "passthrough": { "bulkRunId": bulkRunToken }
-    };
-
-    logToConsole(`[${bulkRunToken}] Synchronizing parallel Even/Odd executions...`);
-    
-    optionsWebSocket.send(JSON.stringify(payloadEven));
-    optionsWebSocket.send(JSON.stringify(payloadOdd));
-    totalTradesExecutedBEO += 2;
-    logToConsole(`[Bulk EO Run Status]: ${totalTradesExecutedBEO} / ${maxCap} individual contracts executed.`);
-}
 function executeContractEO() {
     if (isChallengeLocked()) {
         logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
@@ -1109,6 +1016,10 @@ function handleContractUpdate(contract) {
             updateSessionProfitUI();
             checkTPSLHit();
             showPnlToast(calculateLedgerTotal());
+
+            if (contract.passthrough?.bulkRunId?.startsWith("EDGE_")) {
+                handleEdgeTradeSettled(profitValue);
+            }
         }
     }
 
@@ -1263,6 +1174,119 @@ if (btnToggleAutoTN) {
     });
 }
 
+// --- OVER 0 / UNDER 9 EDGE ROTATION ---
+const btnToggleEdgeRotation = document.getElementById("btn-toggle-edge-rotation");
+const tradeStakeEdge = document.getElementById("trade-stake-edge");
+const tradeDurationEdge = document.getElementById("trade-duration-edge");
+const takeProfitEdge = document.getElementById("take-profit-edge");
+const maxMultiplierEdge = document.getElementById("max-multiplier-edge");
+const edgeStatusText = document.getElementById("edge-status-text");
+
+const EDGE_WINDOW_SIZE = 10;
+let isEdgeRotationActive = false;
+let edgeDigitWindow = [];
+let edgeBaseStake = 0;
+let edgeCurrentStake = 0;
+let edgeSessionPL = 0;
+let edgeTradeInFlight = false;
+
+function setEdgeStatus(text) {
+    if (edgeStatusText) edgeStatusText.textContent = text;
+}
+
+function stopEdgeRotation(reason) {
+    isEdgeRotationActive = false;
+    edgeTradeInFlight = false;
+    if (btnToggleEdgeRotation) {
+        btnToggleEdgeRotation.textContent = "Start Edge Rotation";
+        btnToggleEdgeRotation.classList.remove('stream-active');
+    }
+    setEdgeStatus(reason || "Idle");
+    logToConsole(`[Edge Rotation] Stopped. ${reason || ""}`, "system-msg");
+}
+
+function fireEdgeTrade(side) {
+    if (isChallengeLocked()) {
+        stopEdgeRotation("Stopped - trading locked until next trading day.");
+        return;
+    }
+    if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
+        stopEdgeRotation("Stopped - stream disconnected.");
+        return;
+    }
+
+    edgeTradeInFlight = true;
+    const bulkRunToken = "EDGE_" + Date.now();
+    challengeBatchExpectedCounts[bulkRunToken] = 1;
+    const duration = parseInt(tradeDurationEdge.value, 10) || 1;
+
+    optionsWebSocket.send(JSON.stringify({
+        "buy": 1,
+        "price": edgeCurrentStake,
+        "subscribe": 1,
+        "parameters": {
+            "amount": edgeCurrentStake,
+            "basis": "stake",
+            "contract_type": side === 'OVER0' ? "DIGITOVER" : "DIGITUNDER",
+            "currency": currencyText.textContent || "USD",
+            "duration": duration,
+            "duration_unit": "t",
+            "underlying_symbol": marketDropdown.value,
+            "barrier": side === 'OVER0' ? "0" : "9"
+        },
+        "passthrough": { "bulkRunId": bulkRunToken }
+    }));
+
+    logToConsole(`[Edge Rotation] Fired ${side === 'OVER0' ? 'Over 0' : 'Under 9'} at stake ${edgeCurrentStake.toFixed(2)} (digit ${side === 'OVER0' ? '0' : '9'} just touched).`, "success-msg");
+}
+
+function handleEdgeTradeSettled(profitValue) {
+    edgeTradeInFlight = false;
+    edgeSessionPL += profitValue;
+
+    const multiplier = parseFloat(maxMultiplierEdge.value) || 5;
+    let nextStake = edgeCurrentStake + profitValue;
+    nextStake = Math.max(edgeBaseStake, nextStake);
+    if (nextStake > edgeBaseStake * multiplier) {
+        logToConsole(`[Edge Rotation] Compounded stake hit the ${multiplier}x safety cap - resetting to base stake.`, "system-msg");
+        nextStake = edgeBaseStake;
+    }
+    edgeCurrentStake = nextStake;
+
+    const tpTarget = parseFloat(takeProfitEdge.value) || 0;
+    if (tpTarget > 0 && edgeSessionPL >= tpTarget) {
+        stopEdgeRotation(`Strategy take-profit hit (+${edgeSessionPL.toFixed(2)}).`);
+        return;
+    }
+
+    if (isEdgeRotationActive) {
+        setEdgeStatus(`Next stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}. Watching...`);
+    }
+}
+
+if (btnToggleEdgeRotation) {
+    btnToggleEdgeRotation.addEventListener("click", () => {
+        if (!isEdgeRotationActive && isChallengeLocked()) {
+            logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+            return;
+        }
+        if (isEdgeRotationActive) {
+            stopEdgeRotation("Stopped by user request.");
+        } else {
+            edgeBaseStake = parseFloat(tradeStakeEdge.value) || 1;
+            edgeCurrentStake = edgeBaseStake;
+            edgeSessionPL = 0;
+            edgeDigitWindow = [];
+            edgeTradeInFlight = false;
+            isEdgeRotationActive = true;
+            btnToggleEdgeRotation.textContent = "Stop Edge Rotation";
+            btnToggleEdgeRotation.classList.add('stream-active');
+            logToConsole("[Edge Rotation] Started. Collecting last 10 ticks before making decisions...", "success-msg");
+            setEdgeStatus(`Warming up - collecting starting data (0/${EDGE_WINDOW_SIZE} ticks)...`);
+        }
+    });
+}
+
 
 
 document.getElementById("btn-reset-balance").addEventListener("click", () => {
@@ -1298,6 +1322,7 @@ function updateTradeControlsState(isActive) {
 
 function disconnectExistingStream() {
     if (optionsWebSocket) { optionsWebSocket.close(); optionsWebSocket = null; }
+    if (isEdgeRotationActive) stopEdgeRotation("Stopped - stream disconnected.");
     updateTradeControlsState(false);
     marketPanel.style.display = 'none';
     btnToggleStream.disabled = false;
@@ -1356,10 +1381,10 @@ const CHALLENGE_STORAGE_KEY = 'we_trade_challenge_v1';
 const CHALLENGE_LOCK_BUTTON_IDS = [
     'btn-buy-eo', 'btn-toggle-auto-eo',
     'btn-buy-ou', 'btn-toggle-auto-ou',
-    'btn-buy-beo', 'btn-toggle-auto-beo',
     'btn-toggle-auto-pou',
     'btn-buy-bulk-over2',
-    'btn-buy-tn', 'btn-toggle-auto-tn'
+    'btn-buy-tn', 'btn-toggle-auto-tn',
+    'btn-toggle-edge-rotation'
 ];
 
 const challengeStartCapitalInput = document.getElementById('challenge-start-capital');
