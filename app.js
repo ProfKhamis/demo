@@ -586,9 +586,9 @@ optionsWebSocket.onmessage = (event) => {
         logToConsole(`[Stream Error] (${reqType}) ${incoming.error.code}: ${incoming.error.message}`, "error-msg");
 
         if (incoming.echo_req?.passthrough?.bulkRunId?.startsWith("EDGE_")) {
-            edgeTradeInFlight = false;
+            edgeOpenTradeCount = Math.max(0, edgeOpenTradeCount - 1);
             if (isEdgeRotationActive) {
-                setEdgeStatus(`Trade failed (${incoming.error.message}) - retrying on next tick...`);
+                logToConsole(`[Edge Rotation] A trade failed to open (${incoming.error.message}) - continuing with the rest.`, "error-msg");
             } else {
                 stopEdgeRotation(`Stopped - buy failed: ${incoming.error.message}`);
             }
@@ -663,12 +663,12 @@ function handleIncomingTickPacket(tickData) {
 
         if (edgeDigitWindow.length < EDGE_WINDOW_SIZE) {
             setEdgeStatus(`Warming up - collecting starting data (${edgeDigitWindow.length}/${EDGE_WINDOW_SIZE} ticks)...`);
-        } else if (!edgeTradeInFlight) {
+        } else {
             const zeroCount = edgeDigitWindow.filter(d => d === 0).length;
             const nineCount = edgeDigitWindow.filter(d => d === 9).length;
             const favoredSide = zeroCount <= nineCount ? 'OVER0' : 'UNDER9';
 
-            setEdgeStatus(`Watching. Favored: ${favoredSide === 'OVER0' ? 'Over 0' : 'Under 9'} (0s: ${zeroCount}, 9s: ${nineCount} in last ${EDGE_WINDOW_SIZE}). Stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}`);
+            setEdgeStatus(`Watching. Favored: ${favoredSide === 'OVER0' ? 'Over 0' : 'Under 9'} (0s: ${zeroCount}, 9s: ${nineCount} in last ${EDGE_WINDOW_SIZE}). Stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)} | Open trades: ${edgeOpenTradeCount}`);
 
             fireEdgeTrade(favoredSide);
         }
@@ -1193,7 +1193,7 @@ let edgeDigitWindow = [];
 let edgeBaseStake = 0;
 let edgeCurrentStake = 0;
 let edgeSessionPL = 0;
-let edgeTradeInFlight = false;
+let edgeOpenTradeCount = 0;
 
 function setEdgeStatus(text) {
     if (edgeStatusText) edgeStatusText.textContent = text;
@@ -1201,7 +1201,6 @@ function setEdgeStatus(text) {
 
 function stopEdgeRotation(reason) {
     isEdgeRotationActive = false;
-    edgeTradeInFlight = false;
     if (btnToggleEdgeRotation) {
         btnToggleEdgeRotation.textContent = "Start Edge Rotation";
         btnToggleEdgeRotation.classList.remove('stream-active');
@@ -1220,7 +1219,7 @@ function fireEdgeTrade(side) {
         return;
     }
 
-    edgeTradeInFlight = true;
+    edgeOpenTradeCount++;
     const bulkRunToken = "EDGE_" + Date.now();
     challengeBatchExpectedCounts[bulkRunToken] = 1;
     const duration = parseInt(tradeDurationEdge.value, 10) || 1;
@@ -1246,7 +1245,7 @@ function fireEdgeTrade(side) {
 }
 
 function handleEdgeTradeSettled(profitValue) {
-    edgeTradeInFlight = false;
+    edgeOpenTradeCount = Math.max(0, edgeOpenTradeCount - 1);
     edgeSessionPL += profitValue;
 
     const multiplier = parseFloat(maxMultiplierEdge.value) || 5;
@@ -1265,7 +1264,7 @@ function handleEdgeTradeSettled(profitValue) {
     }
 
     if (isEdgeRotationActive) {
-        setEdgeStatus(`Next stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}. Watching...`);
+        setEdgeStatus(`Next stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)} | Open trades: ${edgeOpenTradeCount}. Watching...`);
     }
 }
 
@@ -1282,7 +1281,7 @@ if (btnToggleEdgeRotation) {
             edgeCurrentStake = edgeBaseStake;
             edgeSessionPL = 0;
             edgeDigitWindow = [];
-            edgeTradeInFlight = false;
+            edgeOpenTradeCount = 0;
             isEdgeRotationActive = true;
             btnToggleEdgeRotation.textContent = "Stop Edge Rotation";
             btnToggleEdgeRotation.classList.add('stream-active');
