@@ -584,6 +584,15 @@ optionsWebSocket.onmessage = (event) => {
     if (incoming.error) {
         const reqType = incoming.echo_req ? Object.keys(incoming.echo_req).find(k => ['buy', 'proposal_open_contract', 'sell', 'proposal'].includes(k)) : 'unknown';
         logToConsole(`[Stream Error] (${reqType}) ${incoming.error.code}: ${incoming.error.message}`, "error-msg");
+
+        if (incoming.echo_req?.passthrough?.bulkRunId?.startsWith("EDGE_")) {
+            edgeTradeInFlight = false;
+            if (isEdgeRotationActive) {
+                setEdgeStatus(`Trade failed (${incoming.error.message}) - retrying on next tick...`);
+            } else {
+                stopEdgeRotation(`Stopped - buy failed: ${incoming.error.message}`);
+            }
+        }
         return;
     }
     if (incoming.msg_type === "topup_virtual") {
