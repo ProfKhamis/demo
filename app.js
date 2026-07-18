@@ -663,19 +663,8 @@ function handleIncomingTickPacket(tickData) {
 
         if (edgeDigitWindow.length < EDGE_WINDOW_SIZE) {
             setEdgeStatus(`Warming up - collecting starting data (${edgeDigitWindow.length}/${EDGE_WINDOW_SIZE} ticks)...`);
-        } else {
-            const maxRuns = parseInt(maxRunsEdge.value, 10) || 0;
-            if (maxRuns > 0 && edgeRunCount >= maxRuns) {
-                stopEdgeRotation(`Max runs reached (${edgeRunCount}/${maxRuns}). Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}.`);
-            } else {
-                const zeroCount = edgeDigitWindow.filter(d => d === 0).length;
-                const nineCount = edgeDigitWindow.filter(d => d === 9).length;
-                const favoredSide = zeroCount <= nineCount ? 'OVER0' : 'UNDER9';
-
-                setEdgeStatus(`Watching. Favored: ${favoredSide === 'OVER0' ? 'Over 0' : 'Under 9'} (0s: ${zeroCount}, 9s: ${nineCount} in last ${EDGE_WINDOW_SIZE}). Stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)} | Runs: ${edgeRunCount}/${maxRuns || '∞'} | Open trades: ${edgeOpenTradeCount}`);
-
-                fireEdgeTrade(favoredSide);
-            }
+        } else if (edgeOpenTradeCount === 0) {
+            attemptEdgeFire();
         }
     }
 
@@ -1216,6 +1205,22 @@ function stopEdgeRotation(reason) {
     logToConsole(`[Edge Rotation] Stopped. ${reason || ""}`, "system-msg");
 }
 
+function attemptEdgeFire() {
+    const maxRuns = parseInt(maxRunsEdge.value, 10) || 0;
+    if (maxRuns > 0 && edgeRunCount >= maxRuns) {
+        stopEdgeRotation(`Max runs reached (${edgeRunCount}/${maxRuns}). Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}.`);
+        return;
+    }
+
+    const zeroCount = edgeDigitWindow.filter(d => d === 0).length;
+    const nineCount = edgeDigitWindow.filter(d => d === 9).length;
+    const favoredSide = zeroCount <= nineCount ? 'OVER0' : 'UNDER9';
+
+    setEdgeStatus(`Watching. Favored: ${favoredSide === 'OVER0' ? 'Over 0' : 'Under 9'} (0s: ${zeroCount}, 9s: ${nineCount} in last ${EDGE_WINDOW_SIZE}). Stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)} | Runs: ${edgeRunCount}/${maxRuns || '∞'}`);
+
+    fireEdgeTrade(favoredSide);
+}
+
 function fireEdgeTrade(side) {
     if (isChallengeLocked()) {
         stopEdgeRotation("Stopped - trading locked until next trading day.");
@@ -1271,8 +1276,8 @@ function handleEdgeTradeSettled(profitValue) {
         return;
     }
 
-    if (isEdgeRotationActive) {
-        setEdgeStatus(`Next stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)} | Runs: ${edgeRunCount}/${parseInt(maxRunsEdge.value, 10) || '∞'} | Open trades: ${edgeOpenTradeCount}. Watching...`);
+    if (isEdgeRotationActive && edgeOpenTradeCount === 0) {
+        attemptEdgeFire();
     }
 }
 
