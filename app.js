@@ -250,6 +250,7 @@ function haltAllAutoModes() {
     if (isAutoTradingPOU) toggleAutoPOU(false);
     if (isBulkOver2Armed) disarmBulkOver2();
     isAutoModeTN = false;
+    if (isAccuScalperActive) stopAccuScalper("Stopped - session TP/SL hit.");
     logToConsole("[Risk Management] All auto-trading modes halted.", "error-msg");
 }
 
@@ -387,8 +388,6 @@ document.querySelectorAll('.tab-btn').forEach(button => {
         activeTabId = button.getAttribute('data-target');
         document.getElementById(activeTabId).classList.add('active');
         enterFocusMode();
-
-        if (activeTabId === 'tab-match-sweep') requestMatchSweepProposal();
 
         logToConsole(`Switched View: ${button.textContent}`, "system-msg");
     });
@@ -629,7 +628,6 @@ btnToggleStream.addEventListener('click', async () => {
             updateTradeControlsState(true);
             optionsWebSocket.send(JSON.stringify({ "active_symbols": "brief" }));
             optionsWebSocket.send(JSON.stringify({ "active_symbols": "brief" }));
-            if (activeTabId === 'tab-match-sweep') requestMatchSweepProposal();
 
         };
 optionsWebSocket.onmessage = (event) => {
@@ -654,8 +652,6 @@ optionsWebSocket.onmessage = (event) => {
         handlePurchaseReceipt(incoming.buy, incoming.passthrough);
     } else if (incoming.msg_type === "proposal_open_contract") {
         handleContractUpdate(incoming.proposal_open_contract);
-    } else if (incoming.msg_type === "proposal") {
-        handleMatchSweepProposal(incoming.proposal);
     }
 };
 
@@ -681,7 +677,6 @@ function populateMarketDropdown(symbolsArray) {
 marketDropdown.addEventListener('change', (e) => {
     if (optionsWebSocket && optionsWebSocket.readyState === WebSocket.OPEN && e.target.value) {
         subscribeToSymbolTicks(e.target.value);
-        if (activeTabId === 'tab-match-sweep') requestMatchSweepProposal();
     }
 });
 
@@ -1115,6 +1110,14 @@ function handleContractUpdate(contract) {
             updateSessionProfitUI();
             checkTPSLHit();
             showPnlToast(calculateLedgerTotal());
+
+            if (contract.passthrough?.bulkRunId?.startsWith("ACCU_SCALP_")) {
+                accuScalperSessionPL += profitValue;
+                if (isAccuScalperActive) {
+                    clearTimeout(accuScalperRetryTimer);
+                    accuScalperRetryTimer = setTimeout(fireNextAccuTrade, 1500);
+                }
+            }
         }
     }
 
@@ -1269,165 +1272,108 @@ if (btnToggleAutoTN) {
     });
 }
 
-// --- MATCH SWEEP (1-9) ---
-const btnBuyMS = document.getElementById("btn-buy-ms");
-const btnToggleAutoMS = document.getElementById("btn-toggle-auto-ms");
-const tradeStakeMS = document.getElementById("trade-stake-ms");
-const tradeDurationMS = document.getElementById("trade-duration-ms");
-const totalCostMSDisplay = document.getElementById("total-cost-ms-display");
-const msExpectedLossBox = document.getElementById("ms-expected-loss-box");
-const msExpectedLossText = document.getElementById("ms-expected-loss-text");
+// --- ACCUMULATOR SCALPER ---
+const btnToggleAccuScalper = document.getElementById("btn-toggle-accu-scalper");
+const tradeStakeACCU = document.getElementById("trade-stake-accu");
+const growthRateACCU = document.getElementById("growth-rate-accu");
+const takeProfitACCU = document.getElementById("take-profit-accu");
+const sessionSLACCU = document.getElementById("session-sl-accu");
+const sessionTPACCU = document.getElementById("session-tp-accu");
+const accuScalperStatusText = document.getElementById("accu-scalper-status-text");
 
-let isAutoModeMS = false;
-let totalTradesExecutedMS = 0;
-const MATCH_SWEEP_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-let msProposalSubscriptionId = null;
-let msProposalDebounceTimer = null;
+let isAccuScalperActive = false;
+let accuScalperSessionPL = 0;
+let accuScalperRetryTimer = null;
 
-function updateMatchSweepCostDisplay() {
-    if (!tradeStakeMS || !totalCostMSDisplay) return;
-    const stake = parseFloat(tradeStakeMS.value) || 0;
-    totalCostMSDisplay.value = (stake * MATCH_SWEEP_DIGITS.length).toFixed(2);
+function setAccuScalperStatus(text) {
+    if (accuScalperStatusText) accuScalperStatusText.textContent = text;
 }
 
-function requestMatchSweepProposal() {
-    if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) return;
-    if (!msExpectedLossText) return;
+function getCurrentBalance() {
+    if (!balanceText) return 0;
+    return parseFloat(balanceText.textContent.replace(/,/g, '')) || 0;
+}
 
-    const stake = parseFloat(tradeStakeMS.value);
-    const duration = parseInt(tradeDurationMS.value, 10) || 1;
-    if (!stake || stake <= 0) {
-        msExpectedLossText.textContent = "Enter a stake to see the expected result.";
-        return;
+function stopAccuScalper(reason) {
+    isAccuScalperActive = false;
+    clearTimeout(accuScalperRetryTimer);
+    if (btnToggleAccuScalper) {
+        btnToggleAccuScalper.textContent = "Start Scalper";
+        btnToggleAccuScalper.classList.remove('stream-active');
     }
-
-    if (msProposalSubscriptionId) {
-        optionsWebSocket.send(JSON.stringify({ "forget": msProposalSubscriptionId }));
-        msProposalSubscriptionId = null;
-    }
-
-    msExpectedLossText.textContent = "Fetching live payout...";
-
-    optionsWebSocket.send(JSON.stringify({
-        "proposal": 1,
-        "subscribe": 1,
-        "amount": stake,
-        "basis": "stake",
-        "contract_type": "DIGITMATCH",
-        "currency": currencyText.textContent || "USD",
-        "duration": duration,
-        "duration_unit": "t",
-        "underlying_symbol": marketDropdown.value,
-        "barrier": "1",
-        "passthrough": { "msProposal": true }
-    }));
+    setAccuScalperStatus(reason || "Idle");
+    logToConsole(`[Accu Scalper] Stopped. ${reason || ""}`, "system-msg");
 }
 
-function handleMatchSweepProposal(proposal) {
-    if (!proposal || !msExpectedLossText) return;
-    if (proposal.id) msProposalSubscriptionId = proposal.id;
-
-    const stake = parseFloat(tradeStakeMS.value);
-    const payout = parseFloat(proposal.payout);
-    if (isNaN(payout) || isNaN(stake) || stake <= 0) return;
-
-    const profitPerLeg = payout - stake;
-    const legCount = MATCH_SWEEP_DIGITS.length;
-    const winCaseResult = profitPerLeg - (stake * (legCount - 1)); // 1 leg wins, other 8 lose
-    const loseCaseResult = -(stake * legCount); // digit 0 hits, everything loses
-    const expectedValue = (0.9 * winCaseResult) + (0.1 * loseCaseResult);
-
-    const verdict = expectedValue >= 0 ? "PROFITABLE" : "A LOSS";
-    msExpectedLossBox.style.borderColor = expectedValue >= 0 ? "var(--accent-green)" : "var(--accent-red)";
-    msExpectedLossBox.style.background = expectedValue >= 0 ? "var(--green-glow)" : "var(--red-glow)";
-
-    msExpectedLossText.textContent =
-        `On a win (~90% of ticks): ${winCaseResult >= 0 ? '+' : ''}${winCaseResult.toFixed(2)}. ` +
-        `On digit 0 (~10% of ticks): ${loseCaseResult.toFixed(2)}. ` +
-        `Expected value per sweep: ${expectedValue >= 0 ? '+' : ''}${expectedValue.toFixed(2)} (${verdict}), based on live payout of ${payout.toFixed(2)} per ${stake.toFixed(2)} stake.`;
-}
-
-if (tradeStakeMS) {
-    tradeStakeMS.addEventListener('input', () => {
-        updateMatchSweepCostDisplay();
-        clearTimeout(msProposalDebounceTimer);
-        msProposalDebounceTimer = setTimeout(requestMatchSweepProposal, 600);
-    });
-    updateMatchSweepCostDisplay();
-}
-if (tradeDurationMS) {
-    tradeDurationMS.addEventListener('input', () => {
-        clearTimeout(msProposalDebounceTimer);
-        msProposalDebounceTimer = setTimeout(requestMatchSweepProposal, 600);
-    });
-}
-
-function executeMatchSweep() {
+function fireNextAccuTrade() {
+    if (!isAccuScalperActive) return;
 
     if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
-        isAutoModeMS = false;
+        stopAccuScalper("Stopped - trading locked until next trading day.");
         return;
     }
-
     if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
-        logToConsole("Error: WebSocket not connected.", "error-msg");
+        stopAccuScalper("Stopped - stream disconnected.");
         return;
     }
 
-    const stake = parseFloat(tradeStakeMS.value);
-    const duration = parseInt(tradeDurationMS.value, 10) || 1;
-    const bulkRunToken = "BULK_MS_" + Date.now();
-    challengeBatchExpectedCounts[bulkRunToken] = MATCH_SWEEP_DIGITS.length;
+    const balance = getCurrentBalance();
+    const slPct = parseFloat(sessionSLACCU.value) || 0;
+    const tpPct = parseFloat(sessionTPACCU.value) || 0;
+    if (slPct > 0 && accuScalperSessionPL <= -(balance * slPct / 100)) {
+        stopAccuScalper(`Session stop-loss hit (${accuScalperSessionPL.toFixed(2)}).`);
+        return;
+    }
+    if (tpPct > 0 && accuScalperSessionPL >= (balance * tpPct / 100)) {
+        stopAccuScalper(`Session take-profit hit (+${accuScalperSessionPL.toFixed(2)}).`);
+        return;
+    }
 
-    const baseParams = {
-        "amount": stake,
-        "basis": "stake",
-        "currency": currencyText.textContent || "USD",
-        "duration": duration,
-        "duration_unit": "t",
-        "underlying_symbol": marketDropdown.value,
-        "contract_type": "DIGITMATCH"
-    };
+    const stake = parseFloat(tradeStakeACCU.value);
+    const growthRate = (parseFloat(growthRateACCU.value) || 1) / 100;
+    const takeProfitAmount = stake * ((parseFloat(takeProfitACCU.value) || 3) / 100);
+    const bulkRunToken = "ACCU_SCALP_" + Date.now();
+    challengeBatchExpectedCounts[bulkRunToken] = 1;
 
-    MATCH_SWEEP_DIGITS.forEach(digit => {
-        optionsWebSocket.send(JSON.stringify({
-            "buy": 1,
-            "price": stake,
-            "subscribe": 1,
-            "parameters": { ...baseParams, "barrier": digit.toString() },
-            "passthrough": { "bulkRunId": bulkRunToken }
-        }));
-    });
+    optionsWebSocket.send(JSON.stringify({
+        "buy": 1,
+        "price": stake,
+        "subscribe": 1,
+        "parameters": {
+            "amount": stake,
+            "basis": "stake",
+            "contract_type": "ACCU",
+            "currency": currencyText.textContent || "USD",
+            "growth_rate": growthRate,
+            "underlying_symbol": marketDropdown.value,
+            "limit_order": { "take_profit": takeProfitAmount }
+        },
+        "passthrough": { "bulkRunId": bulkRunToken }
+    }));
 
-    totalTradesExecutedMS += MATCH_SWEEP_DIGITS.length;
-    logToConsole(`[Match Sweep] Fired Match 1-9 (${MATCH_SWEEP_DIGITS.length} contracts, ${(stake * MATCH_SWEEP_DIGITS.length).toFixed(2)} total stake) on this tick.`, "success-msg");
+    setAccuScalperStatus(`Live - watching for +${takeProfitACCU.value}% take-profit or knockout. Session P/L: ${accuScalperSessionPL >= 0 ? '+' : ''}${accuScalperSessionPL.toFixed(2)}`);
+    logToConsole(`[Accu Scalper] Opened trade. Stake: ${stake}, Growth: ${growthRateACCU.value}%, TP: +${takeProfitAmount.toFixed(2)}`, "success-msg");
 }
 
-if (btnBuyMS) {
-    btnBuyMS.addEventListener("click", executeMatchSweep);
-} else {
-    console.error("CRITICAL: btn-buy-ms not found in the DOM!");
-}
-
-if (btnToggleAutoMS) {
-    btnToggleAutoMS.addEventListener("click", () => {
-        if (!isAutoModeMS && isChallengeLocked()) {
+if (btnToggleAccuScalper) {
+    btnToggleAccuScalper.addEventListener("click", () => {
+        if (!isAccuScalperActive && isChallengeLocked()) {
             logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
             return;
         }
-        isAutoModeMS = !isAutoModeMS;
-        btnToggleAutoMS.textContent = isAutoModeMS ? "Stop Auto Bulk Mode" : "Auto Bulk Mode";
-        btnToggleAutoMS.classList.toggle('stream-active', isAutoModeMS);
-        if (isAutoModeMS) {
-            totalTradesExecutedMS = 0;
-            logToConsole("[Match Sweep] Auto Bulk Mode started. Firing a Match 1-9 sweep now, then auto-stopping.", "success-msg");
-            executeMatchSweep();
+        if (isAccuScalperActive) {
+            stopAccuScalper("Stopped by user request.");
         } else {
-            logToConsole("[Match Sweep] Auto Bulk Mode stopped by user request.");
+            isAccuScalperActive = true;
+            accuScalperSessionPL = 0;
+            btnToggleAccuScalper.textContent = "Stop Scalper";
+            btnToggleAccuScalper.classList.add('stream-active');
+            logToConsole("[Accu Scalper] Started. Will keep opening trades automatically until stopped or a session limit is hit.", "success-msg");
+            fireNextAccuTrade();
         }
     });
 }
+
 
 document.getElementById("btn-reset-balance").addEventListener("click", () => {
     if (confirm("Are you sure you want to reset your demo balance to 10,000 USD?")) {
@@ -1462,7 +1408,7 @@ function updateTradeControlsState(isActive) {
 
 function disconnectExistingStream() {
     if (optionsWebSocket) { optionsWebSocket.close(); optionsWebSocket = null; }
-    msProposalSubscriptionId = null;
+    if (isAccuScalperActive) stopAccuScalper("Stopped - stream disconnected.");
     updateTradeControlsState(false);
     marketPanel.style.display = 'none';
     btnToggleStream.disabled = false;
@@ -1525,7 +1471,7 @@ const CHALLENGE_LOCK_BUTTON_IDS = [
     'btn-toggle-auto-pou',
     'btn-buy-bulk-over2',
     'btn-buy-tn', 'btn-toggle-auto-tn',
-    'btn-buy-ms', 'btn-toggle-auto-ms'
+    'btn-toggle-accu-scalper'
 ];
 
 const challengeStartCapitalInput = document.getElementById('challenge-start-capital');
