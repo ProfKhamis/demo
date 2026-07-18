@@ -165,7 +165,6 @@
             <button class="tab-btn" data-target="tab-bulk-ou">Bulk Over/Under</button>
             <button class="tab-btn" data-target="tab-bulk-eo">Bulk Even/Odd</button>
             <button class="tab-btn" data-target="tab-bulk-tn">Differs</button>
-            <button class="tab-btn" data-target="tab-accu-scalper">Accumulator Scalper</button>
             <button class="tab-btn" data-target="tab-pattern-ou">Pattern Over/Under</button>
         </div>
 
@@ -242,47 +241,6 @@
         <button id="btn-buy-tn" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Buy
             Differ Manually</button>
         <button id="btn-toggle-auto-tn" class="btn-secondary" style="flex: 1;">Auto Bulk Mode</button>
-    </div>
-</section>
-<section class="card tab-content" id="tab-accu-scalper">
-    <h3>Accumulator Scalper</h3>
-    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
-        Once started, this buys an Accumulator, lets Deriv auto-cash it out at your take-profit target (or it knocks out if price leaves the growth range), then immediately opens the next one — repeating on its own until you stop it or a session limit is hit. Accumulators can only lose the full stake on a knockout (there's no partial mid-trade loss), so protection here is a session-wide stop, not a per-trade trailing stop.
-    </p>
-    <div class="form-row">
-        <div class="form-group">
-            <label>Stake (Per Trade):</label>
-            <input type="number" id="trade-stake-accu" value="5.00" min="0.50" step="0.50">
-        </div>
-        <div class="form-group">
-            <label>Growth Rate (%):</label>
-            <input type="number" id="growth-rate-accu" value="1" min="1" max="5" step="1"
-                title="Available growth rates depend on the selected market">
-        </div>
-        <div class="form-group">
-            <label>Take-Profit Per Trade (%):</label>
-            <input type="number" id="take-profit-accu" value="3" min="0.5" step="0.5"
-                title="Contract auto-cashes out once its value grows by this % of stake">
-        </div>
-    </div>
-    <div class="form-row" style="margin-top: 10px;">
-        <div class="form-group">
-            <label>Session Stop-Loss (% of balance):</label>
-            <input type="number" id="session-sl-accu" value="5" min="0" step="0.5"
-                title="Scalper stops itself if cumulative losses from this session reach this % of your current balance">
-        </div>
-        <div class="form-group">
-            <label>Session Take-Profit (% of balance):</label>
-            <input type="number" id="session-tp-accu" value="10" min="0" step="0.5"
-                title="Scalper stops itself once cumulative session gains reach this % of your current balance (0 = no cap)">
-        </div>
-    </div>
-    <div id="accu-scalper-status-box" style="margin-top: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-surface); font-size: 0.82rem; color: var(--text-secondary);">
-        <strong>Scalper Status:</strong> <span id="accu-scalper-status-text">Idle</span>
-    </div>
-    <div style="display: flex; gap: 10px; margin-top: 14px;">
-        <button id="btn-toggle-accu-scalper" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Start
-            Scalper</button>
     </div>
 </section>
         <section class="card tab-content active" id="tab-even-odd">
