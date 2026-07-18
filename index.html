@@ -177,7 +177,7 @@
 <section class="card tab-content" id="tab-bulk-eo">
     <h3>Over 0 / Under 9 (Edge Rotation)</h3>
     <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
-        Watches the last 10 ticks to decide which side is currently favored (fewer recent 0s = lean Over 0, fewer recent 9s = lean Under 9), then fires a new trade on that side every single tick - it does not wait for previous trades to settle first, so multiple trades can be open at once. Stake compounds forward (stake + last settled trade's profit/loss) each time a trade settles, floored at your base stake so a loss can't zero it out, and capped at a multiple of base stake for safety. Runs non-stop until your Strategy Take-Profit is hit or you stop it.
+        Watches the last 10 ticks to decide which side is currently favored (fewer recent 0s = lean Over 0, fewer recent 9s = lean Under 9), then fires a trade on that side. The moment it settles, it immediately fires the next one with the freshly compounded stake and re-checked favored side - no waiting for the next tick, but also never more than one trade open at a time, since real compounding needs to know the previous result first. Stake = previous stake + that trade's profit/loss, floored at your base stake so a loss can't zero it out, and capped at a multiple of base stake for safety. Runs non-stop until your Strategy Take-Profit or Max Runs is hit, or you stop it.
     </p>
     <div class="form-row">
         <div class="form-group">
