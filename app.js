@@ -661,11 +661,7 @@ function handleIncomingTickPacket(tickData) {
 
             setEdgeStatus(`Watching. Favored: ${favoredSide === 'OVER0' ? 'Over 0' : 'Under 9'} (0s: ${zeroCount}, 9s: ${nineCount} in last ${EDGE_WINDOW_SIZE}). Stake: ${edgeCurrentStake.toFixed(2)} | Session P/L: ${edgeSessionPL >= 0 ? '+' : ''}${edgeSessionPL.toFixed(2)}`);
 
-            if (favoredSide === 'OVER0' && lastDigit === 0) {
-                fireEdgeTrade('OVER0');
-            } else if (favoredSide === 'UNDER9' && lastDigit === 9) {
-                fireEdgeTrade('UNDER9');
-            }
+            fireEdgeTrade(favoredSide);
         }
     }
 
@@ -1237,7 +1233,7 @@ function fireEdgeTrade(side) {
         "passthrough": { "bulkRunId": bulkRunToken }
     }));
 
-    logToConsole(`[Edge Rotation] Fired ${side === 'OVER0' ? 'Over 0' : 'Under 9'} at stake ${edgeCurrentStake.toFixed(2)} (digit ${side === 'OVER0' ? '0' : '9'} just touched).`, "success-msg");
+    logToConsole(`[Edge Rotation] Fired ${side === 'OVER0' ? 'Over 0' : 'Under 9'} at stake ${edgeCurrentStake.toFixed(2)}.`, "success-msg");
 }
 
 function handleEdgeTradeSettled(profitValue) {
