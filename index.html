@@ -165,6 +165,7 @@
             <button class="tab-btn" data-target="tab-bulk-ou">Bulk Over/Under</button>
             <button class="tab-btn" data-target="tab-bulk-eo">Bulk Even/Odd</button>
             <button class="tab-btn" data-target="tab-bulk-tn">Differs</button>
+            <button class="tab-btn" data-target="tab-match-sweep">Match Sweep</button>
             <button class="tab-btn" data-target="tab-pattern-ou">Pattern Over/Under</button>
         </div>
 
@@ -241,6 +242,31 @@
         <button id="btn-buy-tn" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Buy
             Differ Manually</button>
         <button id="btn-toggle-auto-tn" class="btn-secondary" style="flex: 1;">Auto Bulk Mode</button>
+    </div>
+</section>
+<section class="card tab-content" id="tab-match-sweep">
+    <h3>Match Sweep (1-9)</h3>
+    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
+        Fires 9 separate Matches contracts on the same tick — one for every digit 1 through 9. Only digit 0 loses the whole sweep. Whether a single win covers the other 8 stakes depends on Deriv's live payout for each digit at the moment you fire — check the quoted payout before relying on this.
+    </p>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Stake (Per Digit):</label>
+            <input type="number" id="trade-stake-ms" value="1.00" min="0.50" step="0.50">
+        </div>
+        <div class="form-group">
+            <label>Duration (Ticks):</label>
+            <input type="number" id="trade-duration-ms" value="1" min="1" max="10">
+        </div>
+        <div class="form-group">
+            <label>Total Cost Per Sweep:</label>
+            <input type="text" id="total-cost-ms-display" value="9.00" readonly disabled>
+        </div>
+    </div>
+    <div style="display: flex; gap: 10px; margin-top: 14px;">
+        <button id="btn-buy-ms" class="btn-primary" style="background-color: var(--accent-green); flex: 1;">Fire
+            Match Sweep (1-9)</button>
+        <button id="btn-toggle-auto-ms" class="btn-secondary" style="flex: 1;">Auto Bulk Mode</button>
     </div>
 </section>
         <section class="card tab-content active" id="tab-even-odd">
