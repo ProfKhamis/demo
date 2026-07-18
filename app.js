@@ -1263,6 +1263,94 @@ if (btnToggleAutoTN) {
     });
 }
 
+// --- MATCH SWEEP (1-9) ---
+const btnBuyMS = document.getElementById("btn-buy-ms");
+const btnToggleAutoMS = document.getElementById("btn-toggle-auto-ms");
+const tradeStakeMS = document.getElementById("trade-stake-ms");
+const tradeDurationMS = document.getElementById("trade-duration-ms");
+const totalCostMSDisplay = document.getElementById("total-cost-ms-display");
+
+let isAutoModeMS = false;
+let totalTradesExecutedMS = 0;
+const MATCH_SWEEP_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+function updateMatchSweepCostDisplay() {
+    if (!tradeStakeMS || !totalCostMSDisplay) return;
+    const stake = parseFloat(tradeStakeMS.value) || 0;
+    totalCostMSDisplay.value = (stake * MATCH_SWEEP_DIGITS.length).toFixed(2);
+}
+if (tradeStakeMS) {
+    tradeStakeMS.addEventListener('input', updateMatchSweepCostDisplay);
+    updateMatchSweepCostDisplay();
+}
+
+function executeMatchSweep() {
+
+    if (isChallengeLocked()) {
+        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+        isAutoModeMS = false;
+        return;
+    }
+
+    if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
+        logToConsole("Error: WebSocket not connected.", "error-msg");
+        return;
+    }
+
+    const stake = parseFloat(tradeStakeMS.value);
+    const duration = parseInt(tradeDurationMS.value, 10) || 1;
+    const bulkRunToken = "BULK_MS_" + Date.now();
+    challengeBatchExpectedCounts[bulkRunToken] = MATCH_SWEEP_DIGITS.length;
+
+    const baseParams = {
+        "amount": stake,
+        "basis": "stake",
+        "currency": currencyText.textContent || "USD",
+        "duration": duration,
+        "duration_unit": "t",
+        "underlying_symbol": marketDropdown.value,
+        "contract_type": "DIGITMATCH"
+    };
+
+    MATCH_SWEEP_DIGITS.forEach(digit => {
+        optionsWebSocket.send(JSON.stringify({
+            "buy": 1,
+            "price": stake,
+            "subscribe": 1,
+            "parameters": { ...baseParams, "barrier": digit.toString() },
+            "passthrough": { "bulkRunId": bulkRunToken }
+        }));
+    });
+
+    totalTradesExecutedMS += MATCH_SWEEP_DIGITS.length;
+    logToConsole(`[Match Sweep] Fired Match 1-9 (${MATCH_SWEEP_DIGITS.length} contracts, ${(stake * MATCH_SWEEP_DIGITS.length).toFixed(2)} total stake) on this tick.`, "success-msg");
+}
+
+if (btnBuyMS) {
+    btnBuyMS.addEventListener("click", executeMatchSweep);
+} else {
+    console.error("CRITICAL: btn-buy-ms not found in the DOM!");
+}
+
+if (btnToggleAutoMS) {
+    btnToggleAutoMS.addEventListener("click", () => {
+        if (!isAutoModeMS && isChallengeLocked()) {
+            logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+            return;
+        }
+        isAutoModeMS = !isAutoModeMS;
+        btnToggleAutoMS.textContent = isAutoModeMS ? "Stop Auto Bulk Mode" : "Auto Bulk Mode";
+        btnToggleAutoMS.classList.toggle('stream-active', isAutoModeMS);
+        if (isAutoModeMS) {
+            totalTradesExecutedMS = 0;
+            logToConsole("[Match Sweep] Auto Bulk Mode started. Firing a Match 1-9 sweep now, then auto-stopping.", "success-msg");
+            executeMatchSweep();
+        } else {
+            logToConsole("[Match Sweep] Auto Bulk Mode stopped by user request.");
+        }
+    });
+}
+
 document.getElementById("btn-reset-balance").addEventListener("click", () => {
     if (confirm("Are you sure you want to reset your demo balance to 10,000 USD?")) {
         resetDemoBalance();
@@ -1357,7 +1445,8 @@ const CHALLENGE_LOCK_BUTTON_IDS = [
     'btn-buy-beo', 'btn-toggle-auto-beo',
     'btn-toggle-auto-pou',
     'btn-buy-bulk-over2',
-    'btn-buy-tn', 'btn-toggle-auto-tn'
+    'btn-buy-tn', 'btn-toggle-auto-tn',
+    'btn-buy-ms', 'btn-toggle-auto-ms'
 ];
 
 const challengeStartCapitalInput = document.getElementById('challenge-start-capital');
