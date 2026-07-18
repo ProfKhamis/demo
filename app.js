@@ -250,7 +250,6 @@ function haltAllAutoModes() {
     if (isAutoTradingPOU) toggleAutoPOU(false);
     if (isBulkOver2Armed) disarmBulkOver2();
     isAutoModeTN = false;
-    if (isAccuScalperActive) stopAccuScalper("Stopped - session TP/SL hit.");
     logToConsole("[Risk Management] All auto-trading modes halted.", "error-msg");
 }
 
@@ -1110,14 +1109,6 @@ function handleContractUpdate(contract) {
             updateSessionProfitUI();
             checkTPSLHit();
             showPnlToast(calculateLedgerTotal());
-
-            if (contract.passthrough?.bulkRunId?.startsWith("ACCU_SCALP_")) {
-                accuScalperSessionPL += profitValue;
-                if (isAccuScalperActive) {
-                    clearTimeout(accuScalperRetryTimer);
-                    accuScalperRetryTimer = setTimeout(fireNextAccuTrade, 1500);
-                }
-            }
         }
     }
 
@@ -1272,107 +1263,6 @@ if (btnToggleAutoTN) {
     });
 }
 
-// --- ACCUMULATOR SCALPER ---
-const btnToggleAccuScalper = document.getElementById("btn-toggle-accu-scalper");
-const tradeStakeACCU = document.getElementById("trade-stake-accu");
-const growthRateACCU = document.getElementById("growth-rate-accu");
-const takeProfitACCU = document.getElementById("take-profit-accu");
-const sessionSLACCU = document.getElementById("session-sl-accu");
-const sessionTPACCU = document.getElementById("session-tp-accu");
-const accuScalperStatusText = document.getElementById("accu-scalper-status-text");
-
-let isAccuScalperActive = false;
-let accuScalperSessionPL = 0;
-let accuScalperRetryTimer = null;
-
-function setAccuScalperStatus(text) {
-    if (accuScalperStatusText) accuScalperStatusText.textContent = text;
-}
-
-function getCurrentBalance() {
-    if (!balanceText) return 0;
-    return parseFloat(balanceText.textContent.replace(/,/g, '')) || 0;
-}
-
-function stopAccuScalper(reason) {
-    isAccuScalperActive = false;
-    clearTimeout(accuScalperRetryTimer);
-    if (btnToggleAccuScalper) {
-        btnToggleAccuScalper.textContent = "Start Scalper";
-        btnToggleAccuScalper.classList.remove('stream-active');
-    }
-    setAccuScalperStatus(reason || "Idle");
-    logToConsole(`[Accu Scalper] Stopped. ${reason || ""}`, "system-msg");
-}
-
-function fireNextAccuTrade() {
-    if (!isAccuScalperActive) return;
-
-    if (isChallengeLocked()) {
-        stopAccuScalper("Stopped - trading locked until next trading day.");
-        return;
-    }
-    if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
-        stopAccuScalper("Stopped - stream disconnected.");
-        return;
-    }
-
-    const balance = getCurrentBalance();
-    const slPct = parseFloat(sessionSLACCU.value) || 0;
-    const tpPct = parseFloat(sessionTPACCU.value) || 0;
-    if (slPct > 0 && accuScalperSessionPL <= -(balance * slPct / 100)) {
-        stopAccuScalper(`Session stop-loss hit (${accuScalperSessionPL.toFixed(2)}).`);
-        return;
-    }
-    if (tpPct > 0 && accuScalperSessionPL >= (balance * tpPct / 100)) {
-        stopAccuScalper(`Session take-profit hit (+${accuScalperSessionPL.toFixed(2)}).`);
-        return;
-    }
-
-    const stake = parseFloat(tradeStakeACCU.value);
-    const growthRate = (parseFloat(growthRateACCU.value) || 1) / 100;
-    const takeProfitAmount = stake * ((parseFloat(takeProfitACCU.value) || 3) / 100);
-    const bulkRunToken = "ACCU_SCALP_" + Date.now();
-    challengeBatchExpectedCounts[bulkRunToken] = 1;
-
-    optionsWebSocket.send(JSON.stringify({
-        "buy": 1,
-        "price": stake,
-        "subscribe": 1,
-        "parameters": {
-            "amount": stake,
-            "basis": "stake",
-            "contract_type": "ACCU",
-            "currency": currencyText.textContent || "USD",
-            "growth_rate": growthRate,
-            "underlying_symbol": marketDropdown.value,
-            "limit_order": { "take_profit": takeProfitAmount }
-        },
-        "passthrough": { "bulkRunId": bulkRunToken }
-    }));
-
-    setAccuScalperStatus(`Live - watching for +${takeProfitACCU.value}% take-profit or knockout. Session P/L: ${accuScalperSessionPL >= 0 ? '+' : ''}${accuScalperSessionPL.toFixed(2)}`);
-    logToConsole(`[Accu Scalper] Opened trade. Stake: ${stake}, Growth: ${growthRateACCU.value}%, TP: +${takeProfitAmount.toFixed(2)}`, "success-msg");
-}
-
-if (btnToggleAccuScalper) {
-    btnToggleAccuScalper.addEventListener("click", () => {
-        if (!isAccuScalperActive && isChallengeLocked()) {
-            logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
-            return;
-        }
-        if (isAccuScalperActive) {
-            stopAccuScalper("Stopped by user request.");
-        } else {
-            isAccuScalperActive = true;
-            accuScalperSessionPL = 0;
-            btnToggleAccuScalper.textContent = "Stop Scalper";
-            btnToggleAccuScalper.classList.add('stream-active');
-            logToConsole("[Accu Scalper] Started. Will keep opening trades automatically until stopped or a session limit is hit.", "success-msg");
-            fireNextAccuTrade();
-        }
-    });
-}
 
 
 document.getElementById("btn-reset-balance").addEventListener("click", () => {
@@ -1408,7 +1298,6 @@ function updateTradeControlsState(isActive) {
 
 function disconnectExistingStream() {
     if (optionsWebSocket) { optionsWebSocket.close(); optionsWebSocket = null; }
-    if (isAccuScalperActive) stopAccuScalper("Stopped - stream disconnected.");
     updateTradeControlsState(false);
     marketPanel.style.display = 'none';
     btnToggleStream.disabled = false;
@@ -1470,8 +1359,7 @@ const CHALLENGE_LOCK_BUTTON_IDS = [
     'btn-buy-beo', 'btn-toggle-auto-beo',
     'btn-toggle-auto-pou',
     'btn-buy-bulk-over2',
-    'btn-buy-tn', 'btn-toggle-auto-tn',
-    'btn-toggle-accu-scalper'
+    'btn-buy-tn', 'btn-toggle-auto-tn'
 ];
 
 const challengeStartCapitalInput = document.getElementById('challenge-start-capital');
