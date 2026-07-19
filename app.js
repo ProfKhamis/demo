@@ -276,8 +276,8 @@ btnBuyBulkOver2.addEventListener('click', () => {
 });
 
 function armBulkOver2() {
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
@@ -693,7 +693,7 @@ function handleIncomingTickPacket(tickData) {
     let stopAutoPOU = false;
     let patternMatch = null;
 
-    if (!isChallengeLocked()) {
+    if (!isSessionLocked()) {
         if (activeTabId === 'tab-pattern-ou' && isAutoTradingPOU && !patternCooldown) {
             const maxAllowed = parseInt(maxTradesPOUInput.value, 10) || 10;
             if (totalTradesExecutedPOU + 1 > maxAllowed) {
@@ -769,8 +769,8 @@ function handleIncomingTickPacket(tickData) {
 
 // --- CONTRACT ORDER PLACEMENT CONTROLLERS ---
 function executeContractEO() {
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     if (!optionsWebSocket) return;
@@ -796,8 +796,8 @@ function executeContractEO() {
 }
 
 function executeBulkOverUnderPair() {
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
@@ -858,8 +858,8 @@ function executeBulkOverUnderPair() {
 }
 
 function executePatternOverUnder(match) {
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     if (!optionsWebSocket || optionsWebSocket.readyState !== WebSocket.OPEN) {
@@ -900,8 +900,8 @@ function executePatternOverUnder(match) {
 
 btnToggleAutoPOU.addEventListener('click', () => toggleAutoPOU(!isAutoTradingPOU));
 function toggleAutoPOU(state) {
-    if (state && isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (state && isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     isAutoTradingPOU = state;
@@ -1064,8 +1064,8 @@ btnBuyOU.addEventListener('click', executeBulkOverUnderPair);
 
 btnToggleAutoEO.addEventListener('click', () => toggleAutoEO(!isAutoTradingEO));
 function toggleAutoEO(state) {
-    if (state && isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (state && isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     isAutoTradingEO = state;
@@ -1077,8 +1077,8 @@ function toggleAutoEO(state) {
 
 btnToggleAutoOU.addEventListener('click', () => toggleAutoOU(!isAutoTradingOU));
 function toggleAutoOU(state) {
-    if (state && isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (state && isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         return;
     }
     isAutoTradingOU = state;
@@ -1118,8 +1118,8 @@ if (autoPredictTN) {
 
 function executeBulkDiffers() {
 
-    if (isChallengeLocked()) {
-        logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+    if (isSessionLocked()) {
+        logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
         isAutoModeTN = false;
         return;
     }
@@ -1182,8 +1182,8 @@ if (btnBuyTN) {
 
 if (btnToggleAutoTN) {
     btnToggleAutoTN.addEventListener("click", () => {
-        if (!isAutoModeTN && isChallengeLocked()) {
-            logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+        if (!isAutoModeTN && isSessionLocked()) {
+            logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
             return;
         }
         isAutoModeTN = !isAutoModeTN;
@@ -1244,7 +1244,7 @@ function attemptEdgeFire() {
 }
 
 function fireEdgeTrade(side) {
-    if (isChallengeLocked()) {
+    if (isSessionLocked()) {
         stopEdgeRotation("Stopped - trading locked until next trading day.");
         return;
     }
@@ -1305,8 +1305,8 @@ function handleEdgeTradeSettled(profitValue) {
 
 if (btnToggleEdgeRotation) {
     btnToggleEdgeRotation.addEventListener("click", () => {
-        if (!isEdgeRotationActive && isChallengeLocked()) {
-            logToConsole("[Challenge] Trading is locked until the next trading day.", "error-msg");
+        if (!isEdgeRotationActive && isSessionLocked()) {
+            logToConsole("[Session] Trading is locked until the next session opens.", "error-msg");
             return;
         }
         if (isEdgeRotationActive) {
@@ -1418,9 +1418,13 @@ function showPnlToast(totalValue) {
     }, 4000);
 }
 
-// CHALLENGE 
-const CHALLENGE_STORAGE_KEY = 'we_trade_challenge_v1';
-const CHALLENGE_LOCK_BUTTON_IDS = [
+// --- DAILY SESSION TRACKER ---
+// A fixed daily profit target split across N sessions. Hitting a session's
+// slice locks trading until that session's time window ends, not for a full
+// 24 hours. Session 1's start time anchors the daily clock pattern going
+// forward, so the schedule repeats at the same times every day.
+const SESSION_STORAGE_KEY = 'we_trade_session_v1';
+const SESSION_LOCK_BUTTON_IDS = [
     'btn-buy-eo', 'btn-toggle-auto-eo',
     'btn-buy-ou', 'btn-toggle-auto-ou',
     'btn-toggle-auto-pou',
@@ -1429,132 +1433,147 @@ const CHALLENGE_LOCK_BUTTON_IDS = [
     'btn-toggle-edge-rotation'
 ];
 
-const challengeStartCapitalInput = document.getElementById('challenge-start-capital');
-const challengeGrowthRateInput = document.getElementById('challenge-growth-rate');
-const challengeTotalDaysInput = document.getElementById('challenge-total-days');
-const btnStartChallenge = document.getElementById('btn-start-challenge');
-const btnResetChallenge = document.getElementById('btn-reset-challenge');
-const challengeStatusBanner = document.getElementById('challenge-status-banner');
-const challengeProgressDisplay = document.getElementById('challenge-progress-display');
-const challengeCurrentDayLabel = document.getElementById('challenge-current-day');
-const challengeTotalDaysLabel = document.getElementById('challenge-total-days-label');
-const challengeDayProfitLabel = document.getElementById('challenge-day-profit');
-const challengeDayTargetLabel = document.getElementById('challenge-day-target');
-const challengeProgressFill = document.getElementById('challenge-progress-fill');
-const challengeTableBody = document.getElementById('challenge-table-body');
+const sessionDailyTargetInput = document.getElementById('session-daily-target');
+const sessionsPerDayInput = document.getElementById('session-count');
+const btnStartSession = document.getElementById('btn-start-session');
+const btnResetSession = document.getElementById('btn-reset-session');
+const sessionStatusBanner = document.getElementById('session-status-banner');
+const sessionProgressDisplay = document.getElementById('session-progress-display');
+const sessionCurrentLabel = document.getElementById('session-current-label');
+const sessionProfitLabel = document.getElementById('session-profit-label');
+const sessionTargetLabel = document.getElementById('session-target-label');
+const sessionProgressFill = document.getElementById('session-progress-fill');
+const sessionTableBody = document.getElementById('session-table-body');
+const sessionScheduleNote = document.getElementById('session-schedule-note');
 
-let challengeRows = [];
-
-function defaultChallengeState() {
+function defaultSessionState() {
     return {
         active: false,
-        startCapital: 2.00,
-        growthRate: 0.20,
-        totalDays: 30,
-        currentDay: 1,
-        dayProfit: 0,
-        completedDays: [],
-        lockedDate: null   
+        dailyTarget: 10.00,
+        sessionsPerDay: 4,
+        anchorTimestamp: null,
+        currentGlobalIndex: null,
+        sessionProfit: 0,
+        lockedUntilTimestamp: null,
+        log: {}
     };
 }
 
-function loadChallengeState() {
+function loadSessionState() {
     try {
-        const raw = localStorage.getItem(CHALLENGE_STORAGE_KEY);
-        if (!raw) return defaultChallengeState();
-        return { ...defaultChallengeState(), ...JSON.parse(raw) };
+        const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+        if (!raw) return defaultSessionState();
+        return { ...defaultSessionState(), ...JSON.parse(raw) };
     } catch (e) {
-        return defaultChallengeState();
+        return defaultSessionState();
     }
 }
 
-function saveChallengeState() {
-    try { localStorage.setItem(CHALLENGE_STORAGE_KEY, JSON.stringify(challengeState)); } catch (e) { /* ignore */ }
+function saveSessionState() {
+    try { localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionState)); } catch (e) { /* ignore */ }
 }
 
-let challengeState = loadChallengeState();
+let sessionState = loadSessionState();
 
-function buildChallengeRows() {
-    const rows = [];
-    let start = challengeState.startCapital;
-    for (let day = 1; day <= challengeState.totalDays; day++) {
-        const target = start * challengeState.growthRate;
-        const end = start + target;
-        rows.push({ day, start, target, end });
-        start = end;
-    }
-    challengeRows = rows;
+function sessionIntervalMs() {
+    return (24 * 60 * 60 * 1000) / sessionState.sessionsPerDay;
 }
 
-function todayStr() {
-    return new Date().toDateString();
+function sessionTargetAmount() {
+    return sessionState.dailyTarget / sessionState.sessionsPerDay;
 }
 
-function isChallengeLocked() {
-    return challengeState.active && !!challengeState.lockedDate;
+function computeGlobalIndexForNow() {
+    if (sessionState.anchorTimestamp === null) return null;
+    return Math.floor((Date.now() - sessionState.anchorTimestamp) / sessionIntervalMs());
 }
 
-function currentChallengeRow() {
-    return challengeRows.find(r => r.day === challengeState.currentDay) || null;
+function sessionWindow(globalIndex) {
+    const start = sessionState.anchorTimestamp + globalIndex * sessionIntervalMs();
+    return { start, end: start + sessionIntervalMs() };
 }
 
-function checkChallengeDayRollover() {
-    if (!challengeState.active || !challengeState.lockedDate) return;
-    if (challengeState.lockedDate !== todayStr()) {
-        challengeState.currentDay += 1;
-        challengeState.dayProfit = 0;
-        challengeState.lockedDate = null;
-        saveChallengeState();
-        applyChallengeLockToButtons(false);
-        if (challengeState.currentDay <= challengeState.totalDays) {
-            logToConsole(`[Challenge] New trading day \u2014 Day ${challengeState.currentDay} is now unlocked. Good luck.`, "success-msg");
-        } else {
-            logToConsole(`[Challenge] All ${challengeState.totalDays} days complete! Challenge finished.`, "success-msg");
-        }
-        renderChallengeUI();
-    }
+function sessionOfDayLabel(globalIndex) {
+    const dayNum = Math.floor(globalIndex / sessionState.sessionsPerDay) + 1;
+    const sessionNum = (globalIndex % sessionState.sessionsPerDay) + 1;
+    return { dayNum, sessionNum };
 }
 
-function registerChallengeProfit(profitValue) {
-    if (!challengeState.active) {
-        logToConsole(`[Challenge] Settled amount (${profitValue >= 0 ? '+' : ''}${profitValue.toFixed(2)}) but no challenge is running \u2014 click "Start Challenge" to begin tracking.`, "system-msg");
+function isSessionLocked() {
+    return sessionState.active && sessionState.lockedUntilTimestamp !== null && Date.now() < sessionState.lockedUntilTimestamp;
+}
+
+function formatClock(ts) {
+    return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function checkSessionRollover() {
+    if (!sessionState.active) return;
+    const idx = computeGlobalIndexForNow();
+    if (idx === null) return;
+
+    if (sessionState.currentGlobalIndex === null) {
+        sessionState.currentGlobalIndex = idx;
+        saveSessionState();
+        renderSessionUI();
         return;
     }
-    if (isChallengeLocked()) {
-        logToConsole(`[Challenge] Settled amount (${profitValue >= 0 ? '+' : ''}${profitValue.toFixed(2)}) but Day ${challengeState.currentDay} is locked \u2014 not counted.`, "system-msg");
+
+    if (idx !== sessionState.currentGlobalIndex) {
+        sessionState.currentGlobalIndex = idx;
+        sessionState.sessionProfit = 0;
+        sessionState.lockedUntilTimestamp = null;
+        saveSessionState();
+        applySessionLockToButtons(false);
+        const { dayNum, sessionNum } = sessionOfDayLabel(idx);
+        logToConsole(`[Session] Day ${dayNum}, Session ${sessionNum} is now open. Good luck.`, "success-msg");
+        renderSessionUI();
+    }
+}
+
+function registerSessionProfit(profitValue) {
+    if (!sessionState.active) {
+        logToConsole(`[Session] Settled amount (${profitValue >= 0 ? '+' : ''}${profitValue.toFixed(2)}) but no session is running \u2014 click "Start Session Tracker" to begin.`, "system-msg");
         return;
     }
-    if (challengeState.currentDay > challengeState.totalDays) return;
+    checkSessionRollover();
+    if (isSessionLocked()) {
+        logToConsole(`[Session] Settled amount (${profitValue >= 0 ? '+' : ''}${profitValue.toFixed(2)}) but this session is locked \u2014 not counted.`, "system-msg");
+        return;
+    }
 
-    challengeState.dayProfit += profitValue;
-    const row = currentChallengeRow();
-    logToConsole(`[Challenge] Day ${challengeState.currentDay} P/L now $${challengeState.dayProfit.toFixed(2)} of $${row ? row.target.toFixed(2) : '?'} target.`, "system-msg");
-    const dayProfitCents = Math.round(challengeState.dayProfit * 100);
-    const targetCents = row ? Math.round(row.target * 100) : Infinity;
-    if (row && dayProfitCents >= targetCents) {
-        lockChallengeDay(row);
+    sessionState.sessionProfit += profitValue;
+    const idx = sessionState.currentGlobalIndex;
+    sessionState.log[idx] = { profit: sessionState.sessionProfit, hit: false };
+
+    const target = sessionTargetAmount();
+    logToConsole(`[Session] Session P/L now $${sessionState.sessionProfit.toFixed(2)} of $${target.toFixed(2)} target.`, "system-msg");
+
+    if (Math.round(sessionState.sessionProfit * 100) >= Math.round(target * 100)) {
+        lockCurrentSession();
     } else {
-        saveChallengeState();
-        renderChallengeUI();
+        saveSessionState();
+        renderSessionUI();
     }
 }
 
-function lockChallengeDay(row) {
-    if (!challengeState.completedDays.includes(row.day)) {
-        challengeState.completedDays.push(row.day);
-    }
-    challengeState.lockedDate = todayStr();
-    saveChallengeState();
+function lockCurrentSession() {
+    const idx = sessionState.currentGlobalIndex;
+    sessionState.log[idx] = { profit: sessionState.sessionProfit, hit: true };
+    const { end } = sessionWindow(idx);
+    sessionState.lockedUntilTimestamp = end;
+    saveSessionState();
 
     haltAllAutoModes();
-    applyChallengeLockToButtons(true);
+    applySessionLockToButtons(true);
 
-    logToConsole(`[Challenge] Day ${row.day} target of $${row.target.toFixed(2)} reached \u2014 all strategies are now locked until the next trading day.`, "success-msg");
-    renderChallengeUI();
+    const { dayNum, sessionNum } = sessionOfDayLabel(idx);
+    logToConsole(`[Session] Day ${dayNum} Session ${sessionNum} target of $${sessionTargetAmount().toFixed(2)} reached \u2014 locked until ${formatClock(end)}.`, "success-msg");
+    renderSessionUI();
 }
 
-function applyChallengeLockToButtons(locked) {
-    CHALLENGE_LOCK_BUTTON_IDS.forEach(id => {
+function applySessionLockToButtons(locked) {
+    SESSION_LOCK_BUTTON_IDS.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         if (locked) {
@@ -1571,114 +1590,124 @@ function applyChallengeLockToButtons(locked) {
     });
 }
 
-function startChallenge() {
-    const start = parseFloat(challengeStartCapitalInput.value) || 2;
-    const rate = (parseFloat(challengeGrowthRateInput.value) || 20) / 100;
-    const days = parseInt(challengeTotalDaysInput.value, 10) || 30;
+function startSessionTracker() {
+    const target = parseFloat(sessionDailyTargetInput.value) || 10;
+    const count = parseInt(sessionsPerDayInput.value, 10) || 4;
+    const now = Date.now();
 
-    challengeState = {
+    sessionState = {
         active: true,
-        startCapital: start,
-        growthRate: rate,
-        totalDays: days,
-        currentDay: 1,
-        dayProfit: 0,
-        completedDays: [],
-        lockedDate: null
+        dailyTarget: target,
+        sessionsPerDay: count,
+        anchorTimestamp: now,
+        currentGlobalIndex: 0,
+        sessionProfit: 0,
+        lockedUntilTimestamp: null,
+        log: {}
     };
-    saveChallengeState();
-    buildChallengeRows();
+    saveSessionState();
 
-    challengeStartCapitalInput.disabled = true;
-    challengeGrowthRateInput.disabled = true;
-    challengeTotalDaysInput.disabled = true;
-    btnStartChallenge.disabled = true;
+    sessionDailyTargetInput.disabled = true;
+    sessionsPerDayInput.disabled = true;
+    btnStartSession.disabled = true;
 
-    logToConsole(`[Challenge] Started: $${start.toFixed(2)} start capital, ${(rate * 100).toFixed(0)}% daily target, over ${days} days.`, "success-msg");
-    renderChallengeUI();
+    const intervalHrs = (sessionIntervalMs() / 3600000).toFixed(1);
+    logToConsole(`[Session] Started: $${target.toFixed(2)}/day target across ${count} sessions ($${(target / count).toFixed(2)} each, ~${intervalHrs}h apart, anchored to now).`, "success-msg");
+    renderSessionUI();
 }
 
-function resetChallenge() {
-    if (!confirm("Restart the challenge from Day 1? All progress and ticks will be cleared.")) return;
-    challengeState = defaultChallengeState();
-    saveChallengeState();
-    buildChallengeRows();
+function resetSessionTracker() {
+    if (!confirm("Reset the session tracker? Your schedule and progress will be cleared.")) return;
+    sessionState = defaultSessionState();
+    saveSessionState();
 
-    challengeStartCapitalInput.disabled = false;
-    challengeGrowthRateInput.disabled = false;
-    challengeTotalDaysInput.disabled = false;
-    btnStartChallenge.disabled = false;
-    applyChallengeLockToButtons(false);
+    sessionDailyTargetInput.disabled = false;
+    sessionsPerDayInput.disabled = false;
+    btnStartSession.disabled = false;
+    applySessionLockToButtons(false);
 
-    logToConsole("[Challenge] Reset. Configure your targets and start again whenever you're ready.", "system-msg");
-    renderChallengeUI();
+    logToConsole("[Session] Reset. Set your targets and start again whenever you're ready.", "system-msg");
+    renderSessionUI();
 }
 
-function renderChallengeUI() {
-    if (!challengeTableBody) return;
-    if (challengeRows.length === 0) buildChallengeRows();
+function renderSessionUI() {
+    if (!sessionTableBody) return;
 
-    if (challengeState.active) {
-        challengeStartCapitalInput.value = challengeState.startCapital.toFixed(2);
-        challengeGrowthRateInput.value = (challengeState.growthRate * 100).toFixed(0);
-        challengeTotalDaysInput.value = challengeState.totalDays;
-        challengeStartCapitalInput.disabled = true;
-        challengeGrowthRateInput.disabled = true;
-        challengeTotalDaysInput.disabled = true;
-        btnStartChallenge.disabled = true;
+    if (!sessionState.active) {
+        if (sessionStatusBanner) sessionStatusBanner.style.display = 'none';
+        if (sessionProgressDisplay) sessionProgressDisplay.style.display = 'none';
+        sessionTableBody.innerHTML = '';
+        if (sessionScheduleNote) sessionScheduleNote.textContent = '';
+        return;
     }
 
-    challengeTableBody.innerHTML = '';
-    challengeRows.forEach(row => {
+    sessionDailyTargetInput.value = sessionState.dailyTarget.toFixed(2);
+    sessionsPerDayInput.value = sessionState.sessionsPerDay;
+    sessionDailyTargetInput.disabled = true;
+    sessionsPerDayInput.disabled = true;
+    btnStartSession.disabled = true;
+
+    const idx = sessionState.currentGlobalIndex ?? 0;
+    const { dayNum, sessionNum } = sessionOfDayLabel(idx);
+    const target = sessionTargetAmount();
+
+    sessionStatusBanner.style.display = 'flex';
+    sessionProgressDisplay.style.display = 'flex';
+
+    sessionCurrentLabel.textContent = `Day ${dayNum} \u00b7 Session ${sessionNum} of ${sessionState.sessionsPerDay}`;
+    sessionProfitLabel.textContent = sessionState.sessionProfit.toFixed(2);
+    sessionTargetLabel.textContent = target.toFixed(2);
+    const pct = Math.max(0, Math.min(100, (sessionState.sessionProfit / target) * 100));
+    if (sessionProgressFill) sessionProgressFill.style.width = `${pct}%`;
+
+    if (isSessionLocked()) {
+        const nextSessionNum = sessionNum < sessionState.sessionsPerDay ? sessionNum + 1 : 1;
+        sessionStatusBanner.className = 'challenge-banner locked';
+        sessionStatusBanner.textContent = `\uD83D\uDD12 Session ${sessionNum} target hit \u2014 locked until ${formatClock(sessionState.lockedUntilTimestamp)} (Session ${nextSessionNum} opens then).`;
+    } else {
+        sessionStatusBanner.className = 'challenge-banner active';
+        sessionStatusBanner.textContent = `Session ${sessionNum} in progress \u2014 target is $${target.toFixed(2)}.`;
+    }
+
+    const dayStartIndex = (dayNum - 1) * sessionState.sessionsPerDay;
+    sessionTableBody.innerHTML = '';
+    const scheduleTimes = [];
+    for (let i = 0; i < sessionState.sessionsPerDay; i++) {
+        const globalIdx = dayStartIndex + i;
+        const { start, end } = sessionWindow(globalIdx);
+        scheduleTimes.push(formatClock(start));
+        const entry = sessionState.log[globalIdx];
+        const isCurrent = globalIdx === idx;
+        const isPast = end <= Date.now();
+
         const tr = document.createElement('tr');
-        const isDone = challengeState.completedDays.includes(row.day);
-        const isCurrent = challengeState.active && row.day === challengeState.currentDay;
-        if (isDone) tr.classList.add('day-complete');
+        if (entry && entry.hit) tr.classList.add('day-complete');
         if (isCurrent) tr.classList.add('day-current');
-        if (challengeState.active && row.day > challengeState.currentDay) tr.classList.add('day-locked-future');
+        if (!isCurrent && !isPast) tr.classList.add('day-locked-future');
+
+        let statusHtml;
+        if (entry && entry.hit) {
+            statusHtml = `<span class="challenge-check">\u2714</span>`;
+        } else if (isPast) {
+            statusHtml = `<span class="challenge-check pending">\u2715 missed</span>`;
+        } else if (isCurrent) {
+            statusHtml = `<span class="challenge-check pending">\u25cf live</span>`;
+        } else {
+            statusHtml = `<span class="challenge-check pending">\u2014</span>`;
+        }
 
         tr.innerHTML = `
-            <td>${row.day}</td>
-            <td>$${row.start.toFixed(2)}</td>
-            <td>$${row.target.toFixed(2)}</td>
-            <td>$${row.end.toFixed(2)}</td>
-            <td style="text-align:center;">
-                <span class="challenge-check ${isDone ? '' : 'pending'}">${isDone ? '\u2714' : '\u2014'}</span>
-            </td>
+            <td>${i + 1}</td>
+            <td>${formatClock(start)} - ${formatClock(end)}</td>
+            <td>$${target.toFixed(2)}</td>
+            <td>$${entry ? entry.profit.toFixed(2) : '0.00'}</td>
+            <td style="text-align:center;">${statusHtml}</td>
         `;
-        challengeTableBody.appendChild(tr);
-    });
-
-    if (!challengeState.active) {
-        challengeStatusBanner.style.display = 'none';
-        challengeProgressDisplay.style.display = 'none';
-        return;
+        sessionTableBody.appendChild(tr);
     }
 
-    challengeStatusBanner.style.display = 'flex';
-
-    if (challengeState.currentDay > challengeState.totalDays) {
-        challengeStatusBanner.className = 'challenge-banner complete';
-        challengeStatusBanner.textContent = `\uD83C\uDFC1 Challenge complete \u2014 all ${challengeState.totalDays} days hit their target.`;
-        challengeProgressDisplay.style.display = 'none';
-        return;
-    }
-
-    challengeProgressDisplay.style.display = 'flex';
-    const row = currentChallengeRow();
-    challengeCurrentDayLabel.textContent = challengeState.currentDay;
-    challengeTotalDaysLabel.textContent = challengeState.totalDays;
-    challengeDayProfitLabel.textContent = challengeState.dayProfit.toFixed(2);
-    challengeDayTargetLabel.textContent = row ? row.target.toFixed(2) : '0.00';
-    const pct = row ? Math.max(0, Math.min(100, (challengeState.dayProfit / row.target) * 100)) : 0;
-    if (challengeProgressFill) challengeProgressFill.style.width = `${pct}%`;
-
-    if (isChallengeLocked()) {
-        challengeStatusBanner.className = 'challenge-banner locked';
-        challengeStatusBanner.textContent = `\uD83D\uDD12 Day ${challengeState.currentDay} target hit \u2014 trading is locked until the next trading day.`;
-    } else {
-        challengeStatusBanner.className = 'challenge-banner active';
-        challengeStatusBanner.textContent = `Day ${challengeState.currentDay} in progress \u2014 target is $${row ? row.target.toFixed(2) : '0.00'}.`;
+    if (sessionScheduleNote) {
+        sessionScheduleNote.textContent = `Your daily schedule (set by when you first started): ${scheduleTimes.join(' \u00b7 ')}`;
     }
 }
 
@@ -1699,12 +1728,12 @@ function handleLedgerMutations(mutationsList) {
         if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') return;
         const cell = mutation.target;
         if (!cell.classList || !(cell.classList.contains('text-win') || cell.classList.contains('text-loss'))) return;
-        if (cell.dataset.challengeCounted === '1') return; 
+        if (cell.dataset.challengeCounted === '1') return;
 
         const profitValue = extractProfitFromLedgerCell(cell);
         cell.dataset.challengeCounted = '1';
         if (profitValue === null) {
-            logToConsole("[Challenge] Ledger row settled but its P/L couldn't be read \u2014 not counted.", "error-msg");
+            logToConsole("[Session] Ledger row settled but its P/L couldn't be read \u2014 not counted.", "error-msg");
             return;
         }
 
@@ -1712,7 +1741,7 @@ function handleLedgerMutations(mutationsList) {
         const batchKey = row ? row.dataset.batchKey : null;
 
         if (!batchKey) {
-            registerChallengeProfit(profitValue);
+            registerSessionProfit(profitValue);
             return;
         }
 
@@ -1725,33 +1754,33 @@ function handleLedgerMutations(mutationsList) {
         if (acc.settled >= expected) {
             delete challengeBatchAccumulators[batchKey];
             delete challengeBatchExpectedCounts[batchKey];
-            logToConsole(`[Challenge] Batch ${batchKey} fully settled (${expected} leg${expected > 1 ? 's' : ''}), net $${acc.profitSum.toFixed(2)}.`, "system-msg");
-            registerChallengeProfit(acc.profitSum);
+            logToConsole(`[Session] Batch ${batchKey} fully settled (${expected} leg${expected > 1 ? 's' : ''}), net $${acc.profitSum.toFixed(2)}.`, "system-msg");
+            registerSessionProfit(acc.profitSum);
         }
     });
 }
 
-let challengeLedgerObserver = null;
-function initChallengeLedgerObserver() {
-    if (!ledgerBody || challengeLedgerObserver) return;
-    challengeLedgerObserver = new MutationObserver(handleLedgerMutations);
-    challengeLedgerObserver.observe(ledgerBody, {
+let sessionLedgerObserver = null;
+function initSessionLedgerObserver() {
+    if (!ledgerBody || sessionLedgerObserver) return;
+    sessionLedgerObserver = new MutationObserver(handleLedgerMutations);
+    sessionLedgerObserver.observe(ledgerBody, {
         subtree: true,
         attributes: true,
         attributeFilter: ['class']
     });
-    logToConsole("[Challenge] Now watching the Live Bulk Strategy Ledger for settled trades.", "system-msg");
+    logToConsole("[Session] Now watching the Live Bulk Strategy Ledger for settled trades.", "system-msg");
 }
 
-if (btnStartChallenge) btnStartChallenge.addEventListener('click', startChallenge);
-if (btnResetChallenge) btnResetChallenge.addEventListener('click', resetChallenge);
+if (btnStartSession) btnStartSession.addEventListener('click', startSessionTracker);
+if (btnResetSession) btnResetSession.addEventListener('click', resetSessionTracker);
 
-buildChallengeRows();
-checkChallengeDayRollover();
-if (challengeState.active) applyChallengeLockToButtons(isChallengeLocked());
-renderChallengeUI();
-initChallengeLedgerObserver();
-setInterval(checkChallengeDayRollover, 60 * 1000);
+checkSessionRollover();
+if (sessionState.active) applySessionLockToButtons(isSessionLocked());
+renderSessionUI();
+initSessionLedgerObserver();
+setInterval(() => { checkSessionRollover(); renderSessionUI(); }, 30 * 1000);
+
 
 (function initQuickNavScrollspy() {
     const navLinks = document.querySelectorAll('.quick-nav-link');
