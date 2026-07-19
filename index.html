@@ -22,7 +22,7 @@
                 <div class="quick-nav-links">
                     <a href="#section-setup" class="quick-nav-link">Setup</a>
                     <a href="#section-market" class="quick-nav-link">Market</a>
-                    <a href="#section-challenge" class="quick-nav-link">Challenge</a>
+                    <a href="#section-session" class="quick-nav-link">Sessions</a>
                     <a href="#section-strategies" class="quick-nav-link">Strategies</a>
                     <a href="#section-ledger" class="quick-nav-link">Ledger</a>
                     <a href="#section-logs" class="quick-nav-link">Logs</a>
@@ -97,48 +97,46 @@
             </div>
         </section>
 
-        <!-- 30-Day Compounding Challenge -->
-        <section class="card" id="section-challenge">
-            <h3><b>30-DAY COMPOUNDING CHALLENGE</b></h3>
+        <!-- Daily Session Tracker -->
+        <section class="card" id="section-session">
+            <h3><b>DAILY SESSION TRACKER</b></h3>
             <p style="font-size: 0.8rem; color: var(--text-secondary);">
-                A disciplined, day-by-day profit target. The instant a day's target is hit, every strategy on
-                this dashboard locks automatically until the next trading day &mdash; removing the temptation to
-                keep pushing your luck after a win.
+                A fixed daily profit target, split evenly across a few sessions. The moment a session's slice
+                is hit, every strategy locks &mdash; but only until that session's time window ends, not for a
+                full day. The time you first start becomes your daily schedule going forward, so you always
+                know exactly when your next session opens.
             </p>
 
-            <div class="form-row" id="challenge-setup-row">
+            <div class="form-row" id="session-setup-row">
                 <div class="form-group">
-                    <label for="challenge-start-capital">Starting Capital ($):</label>
-                    <input type="number" id="challenge-start-capital" value="2.00" min="0.35" step="0.01">
+                    <label for="session-daily-target">Daily Take-Profit Target ($):</label>
+                    <input type="number" id="session-daily-target" value="10.00" min="0.50" step="0.50">
                 </div>
                 <div class="form-group">
-                    <label for="challenge-growth-rate">Daily Target (%):</label>
-                    <input type="number" id="challenge-growth-rate" value="20" min="1" max="100" step="1">
-                </div>
-                <div class="form-group">
-                    <label for="challenge-total-days">Total Days:</label>
-                    <input type="number" id="challenge-total-days" value="30" min="5" max="60" step="1">
+                    <label for="session-count">Sessions Per Day:</label>
+                    <input type="number" id="session-count" value="4" min="2" max="8" step="1">
                 </div>
             </div>
 
             <div style="display: flex; gap: 10px;">
-                <button id="btn-start-challenge" class="btn-primary" style="flex: 1;">Kua Tajiri</button>
-                <button id="btn-reset-challenge" class="btn-secondary" style="flex: 1;">Kua Maskini</button>
+                <button id="btn-start-session" class="btn-primary" style="flex: 1;">Start Session Tracker</button>
+                <button id="btn-reset-session" class="btn-secondary" style="flex: 1;">Reset Tracker</button>
             </div>
 
-            <div id="challenge-status-banner" class="challenge-banner" style="display: none;"></div>
+            <div id="session-status-banner" class="challenge-banner" style="display: none;"></div>
 
-            <div class="balance-display" id="challenge-progress-display"
+            <p id="session-schedule-note" style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 4px;"></p>
+
+            <div class="balance-display" id="session-progress-display"
                 style="display: none; flex-direction: column; align-items: stretch; gap: 8px;">
                 <div
                     style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 0.85rem; font-family: var(--font-body); color: var(--text-secondary); font-weight: 500;">
-                    <span>Day <strong id="challenge-current-day" style="color: var(--text-primary);">1</strong> of
-                        <span id="challenge-total-days-label">30</span></span>
-                    <span>Today's P/L: <strong id="challenge-day-profit" style="color: var(--text-primary);">0.00</strong>
-                        / <strong id="challenge-day-target" style="color: var(--text-primary);">0.00</strong> USD</span>
+                    <span id="session-current-label" style="color: var(--text-primary);">Day 1 &middot; Session 1 of 4</span>
+                    <span>Session P/L: <strong id="session-profit-label" style="color: var(--text-primary);">0.00</strong>
+                        / <strong id="session-target-label" style="color: var(--text-primary);">0.00</strong> USD</span>
                 </div>
                 <div class="challenge-progress-track">
-                    <div id="challenge-progress-fill" class="challenge-progress-fill"></div>
+                    <div id="session-progress-fill" class="challenge-progress-fill"></div>
                 </div>
             </div>
 
@@ -146,14 +144,14 @@
                 <table class="ledger-table challenge-table">
                     <thead>
                         <tr>
-                            <th style="width: 12%;">Day</th>
-                            <th style="width: 26%;">Start Capital</th>
-                            <th style="width: 26%;">Target Profit</th>
-                            <th style="width: 26%;">End Balance</th>
-                            <th style="width: 10%; text-align: center;">✔</th>
+                            <th style="width: 10%;">Session</th>
+                            <th style="width: 28%;">Time Window</th>
+                            <th style="width: 20%;">Target</th>
+                            <th style="width: 20%;">Profit</th>
+                            <th style="width: 22%; text-align: center;">Status</th>
                         </tr>
                     </thead>
-                    <tbody id="challenge-table-body">
+                    <tbody id="session-table-body">
                         <!-- populated dynamically by app.js -->
                     </tbody>
                 </table>
