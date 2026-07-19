@@ -910,6 +910,15 @@ button:disabled, select:disabled, input:disabled {
         background-size: auto, auto, 26px 26px, 26px 26px;
     }
 
+    /* Prevent iOS Safari from auto-zooming when an input is focused */
+    input, select {
+        font-size: 16px;
+    }
+
+    .btn-primary, .btn-secondary {
+        min-height: 44px;
+    }
+
     .dashboard-container {
         gap: 16px;
         padding: 16px 12px 28px;
@@ -1096,4 +1105,63 @@ button:disabled, select:disabled, input:disabled {
         top: 12px;
         max-width: none;
     }
+}
+
+/* --- Loading / Async Feedback --- */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+    vertical-align: -2.5px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.btn-secondary .btn-spinner {
+    border-color: rgba(241, 244, 251, 0.25);
+    border-top-color: var(--text-primary);
+}
+
+button.is-loading {
+    pointer-events: none;
+    opacity: 0.82;
+    cursor: wait;
+}
+
+#global-loading-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 2.5px;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+    z-index: 300;
+    opacity: 0;
+    box-shadow: 0 0 12px var(--accent-glow);
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+#global-loading-bar.active {
+    opacity: 1;
+    animation: global-bar-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes global-bar-pulse {
+    0%   { width: 12%; margin-left: 0%; }
+    50%  { width: 55%; margin-left: 25%; }
+    100% { width: 12%; margin-left: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn-spinner { animation-duration: 1.4s; }
+    #global-loading-bar.active { animation: none; opacity: 0.9; width: 40%; }
 }
