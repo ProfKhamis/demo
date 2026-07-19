@@ -10,6 +10,39 @@ let isAutoTradingOU = false;
 let autoBulkCooldown = false; 
 let totalTradesExecutedOU = 0; 
 
+// --- Loading / async feedback helpers ---
+const globalLoadingBar = document.getElementById('global-loading-bar');
+let pendingWsCallCount = 0;
+
+function showGlobalLoading() {
+    pendingWsCallCount++;
+    if (globalLoadingBar) globalLoadingBar.classList.add('active');
+}
+
+function hideGlobalLoading() {
+    pendingWsCallCount = Math.max(0, pendingWsCallCount - 1);
+    if (pendingWsCallCount === 0 && globalLoadingBar) globalLoadingBar.classList.remove('active');
+}
+
+function setButtonLoading(button, isLoading, loadingText) {
+    if (!button) return;
+    if (isLoading) {
+        if (button.dataset.originalHtml === undefined) {
+            button.dataset.originalHtml = button.innerHTML;
+        }
+        button.classList.add('is-loading');
+        button.disabled = true;
+        button.innerHTML = `<span class="btn-spinner"></span>${loadingText || 'Working...'}`;
+    } else {
+        button.classList.remove('is-loading');
+        button.disabled = false;
+        if (button.dataset.originalHtml !== undefined) {
+            button.innerHTML = button.dataset.originalHtml;
+            delete button.dataset.originalHtml;
+        }
+    }
+}
+
 // DOM Bindings - Core & UI elements
 const btnFetch = document.getElementById('btn-fetch-accounts');
 const btnResetBalance = document.getElementById('btn-reset-balance');
@@ -408,7 +441,10 @@ btnFetch.addEventListener('click', async () => {
     const token = tokenInput.value.trim();
     const appId = appIdInput.value.trim();
     if (!token || !appId) return;
-    
+
+    setButtonLoading(btnFetch, true, 'Connecting...');
+    apiStatus.textContent = "Connecting...";
+
     try {
         const response = await fetch(`${BASE_URL}/trading/v1/options/accounts`, {
             method: 'GET',
@@ -420,7 +456,12 @@ btnFetch.addEventListener('click', async () => {
         localStorage.setItem('deriv_app_id', appId);
         apiStatus.textContent = "Synced";
         populateDropdown(accountList);
-    } catch (e) { logToConsole(e.message, "error-msg"); }
+    } catch (e) {
+        apiStatus.textContent = "Failed";
+        logToConsole(e.message, "error-msg");
+    } finally {
+        setButtonLoading(btnFetch, false);
+    }
 });
 
 document.getElementById("btn-clear-ledger").addEventListener("click", () => {
@@ -554,7 +595,8 @@ btnToggleStream.addEventListener('click', async () => {
     if (!activeAccountId) return;
 
     btnToggleStream.disabled = true;
-    
+    setButtonLoading(btnToggleStream, true, 'Connecting...');
+
     try {
         const response = await fetch(`${BASE_URL}/trading/v1/options/accounts/${activeAccountId}/otp`, {
             method: 'POST',
@@ -565,10 +607,18 @@ btnToggleStream.addEventListener('click', async () => {
         
         optionsWebSocket = new WebSocket(wsUrl);
 
+        const realSend = optionsWebSocket.send.bind(optionsWebSocket);
+        optionsWebSocket.send = function (data) {
+            showGlobalLoading();
+            realSend(data);
+            setTimeout(hideGlobalLoading, 1200);
+        };
+
         optionsWebSocket.onopen = () => {
             logToConsole("Connected! Live Stream Active.", "success-msg");
             const token = tokenInput.value.trim();
     optionsWebSocket.send(JSON.stringify({ "authorize": token }));
+            setButtonLoading(btnToggleStream, false);
             btnToggleStream.disabled = false;
             btnToggleStream.textContent = "Disconnect Stream";
             btnToggleStream.classList.add('stream-active');
@@ -616,6 +666,7 @@ optionsWebSocket.onmessage = (event) => {
         optionsWebSocket.onclose = () => disconnectExistingStream();
 
     } catch (error) {
+        setButtonLoading(btnToggleStream, false);
         disconnectExistingStream();
     }
 });
@@ -1334,6 +1385,7 @@ function disconnectExistingStream() {
     if (isEdgeRotationActive) stopEdgeRotation("Stopped - stream disconnected.");
     updateTradeControlsState(false);
     marketPanel.style.display = 'none';
+    setButtonLoading(btnToggleStream, false);
     btnToggleStream.disabled = false;
     btnToggleStream.textContent = "Connect Real-Time Stream";
     btnToggleStream.classList.remove('stream-active');
