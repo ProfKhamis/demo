@@ -11,19 +11,6 @@ let autoBulkCooldown = false;
 let totalTradesExecutedOU = 0; 
 
 // --- Loading / async feedback helpers ---
-const globalLoadingBar = document.getElementById('global-loading-bar');
-let pendingWsCallCount = 0;
-
-function showGlobalLoading() {
-    pendingWsCallCount++;
-    if (globalLoadingBar) globalLoadingBar.classList.add('active');
-}
-
-function hideGlobalLoading() {
-    pendingWsCallCount = Math.max(0, pendingWsCallCount - 1);
-    if (pendingWsCallCount === 0 && globalLoadingBar) globalLoadingBar.classList.remove('active');
-}
-
 function setButtonLoading(button, isLoading, loadingText) {
     if (!button) return;
     if (isLoading) {
@@ -606,13 +593,6 @@ btnToggleStream.addEventListener('click', async () => {
         const wsUrl = result.data.url;
         
         optionsWebSocket = new WebSocket(wsUrl);
-
-        const realSend = optionsWebSocket.send.bind(optionsWebSocket);
-        optionsWebSocket.send = function (data) {
-            showGlobalLoading();
-            realSend(data);
-            setTimeout(hideGlobalLoading, 1200);
-        };
 
         optionsWebSocket.onopen = () => {
             logToConsole("Connected! Live Stream Active.", "success-msg");
@@ -1346,6 +1326,7 @@ if (btnToggleEdgeRotation) {
         }
     });
 }
+
 
 
 
