@@ -754,7 +754,7 @@ function handleIncomingTickPacket(tickData) {
     }
 
     // --- COLD PATH: pure display work, safe to run after the trade is sent.
-    liveTickValue.textContent = tickData.quote.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    liveTickValue.textContent = priceString;
     liveDigitValue.textContent = lastDigit;
     if (patternDigitHistoryDisplay) {
         patternDigitHistoryDisplay.textContent = recentDigitHistory.join(' ') || '--';
