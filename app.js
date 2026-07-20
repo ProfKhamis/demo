@@ -5,6 +5,11 @@ let totalSessionProfit = 0;
 const sessionProfitDisplay = document.getElementById("session-profit-display"); 
 let activeTabId = 'tab-even-odd';
 const edgeActiveContractIds = new Set();
+const tnActiveContractIds = new Set();
+let tnBatchOpenCount = 0;
+const over2ActiveContractIds = new Set();
+let over2BatchOpenCount = 0;
+const patternOuActiveContractIds = new Set();
 let isAutoTradingEO = false;
 let isAutoTradingOU = false;
 let autoBulkCooldown = false; 
@@ -48,6 +53,7 @@ const marketPanel = document.getElementById('market-data-panel');
 const marketDropdown = document.getElementById('market-dropdown');
 const liveTickValue = document.getElementById('live-tick-value');
 const liveDigitValue = document.getElementById('live-digit-value');
+
 
 // DOM Bindings - Strategy 1 (EO)
 const btnBuyEO = document.getElementById('btn-buy-eo');
@@ -369,7 +375,7 @@ function fireBulkOver2Batch() {
     }
 
     bulkOver2Cooldown = true;
-    setTimeout(() => { bulkOver2Cooldown = false; }, (duration * 2000) + 500);
+    over2BatchOpenCount = batchSize;
 }
 
 // --- TAB NAVIGATION LOGIC ---
@@ -389,10 +395,6 @@ function exitFocusMode() {
 
 document.querySelectorAll('.tab-btn').forEach(button => {
     button.addEventListener('click', () => {
-        if (isAutoTradingEO) toggleAutoEO(false);
-        if (isAutoTradingOU) toggleAutoOU(false);
-        if (isAutoTradingPOU) toggleAutoPOU(false);
-        if (isBulkOver2Armed) disarmBulkOver2();
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 
@@ -694,7 +696,7 @@ function handleIncomingTickPacket(tickData) {
     let patternMatch = null;
 
     if (!isSessionLocked()) {
-        if (activeTabId === 'tab-pattern-ou' && isAutoTradingPOU && !patternCooldown) {
+        if (isAutoTradingPOU && !patternCooldown) {
             const maxAllowed = parseInt(maxTradesPOUInput.value, 10) || 10;
             if (totalTradesExecutedPOU + 1 > maxAllowed) {
                 stopAutoPOU = true;
@@ -709,7 +711,7 @@ function handleIncomingTickPacket(tickData) {
             }
         }
 
-        if (activeTabId === 'tab-bulk-ou' && isBulkOver2Armed && !bulkOver2Cooldown) {
+        if (isBulkOver2Armed && !bulkOver2Cooldown) {
             const isDoubleMode = triggerModeOver2Select && triggerModeOver2Select.value === 'double';
             if (isDoubleMode) {
                 const digitA = parseInt(triggerDigitOver2Input.value, 10);
@@ -726,14 +728,14 @@ function handleIncomingTickPacket(tickData) {
             }
         }
 
-        if (activeTabId === 'tab-even-odd' && isAutoTradingEO) {
+        if (isAutoTradingEO) {
             const isEven = lastDigit % 2 === 0;
             const selectedMode = strategyModeEO.value;
             if ((selectedMode === "DIGITEVEN" && isEven) || (selectedMode === "DIGITODD" && !isEven)) {
                 executeContractEO();
             }
         }
-        else if (activeTabId === 'tab-bulk-ou' && isAutoTradingOU && !autoBulkCooldown) {
+        else if (isAutoTradingOU && !autoBulkCooldown) {
             // A single fire now sends the whole batch of Over/Under pairs on this tick, so just fire once and stop.
             executeBulkOverUnderPair();
 
@@ -895,7 +897,6 @@ function executePatternOverUnder(match) {
     totalTradesExecutedPOU += 1;
     logToConsole(`[Pattern OU Run Status]: ${totalTradesExecutedPOU} / ${maxTradesPOUInput.value} contracts executed.`);
     patternCooldown = true;
-    setTimeout(() => { patternCooldown = false; }, (duration * 2000) + 500);
 }
 
 btnToggleAutoPOU.addEventListener('click', () => toggleAutoPOU(!isAutoTradingPOU));
@@ -930,6 +931,15 @@ function handlePurchaseReceipt(buyReceipt, passthrough) {
 
     if (passthrough && passthrough.bulkRunId && passthrough.bulkRunId.startsWith("EDGE_")) {
         edgeActiveContractIds.add(buyReceipt.contract_id);
+    }
+    if (passthrough && passthrough.bulkRunId && passthrough.bulkRunId.startsWith("BULK_DIFF_")) {
+        tnActiveContractIds.add(buyReceipt.contract_id);
+    }
+    if (passthrough && passthrough.bulkRunId && passthrough.bulkRunId.startsWith("BULK_OVER2_")) {
+        over2ActiveContractIds.add(buyReceipt.contract_id);
+    }
+    if (passthrough && passthrough.bulkRunId && passthrough.bulkRunId.startsWith("PATTERN_OU_")) {
+        patternOuActiveContractIds.add(buyReceipt.contract_id);
     }
 
     if (buyReceipt.balance_after) {
@@ -978,17 +988,31 @@ function handleContractUpdate(contract) {
     logToConsole(`[Stream] Contract ${contract.contract_id} \u2192 status: ${contract.status ?? 'n/a'}, profit: ${contract.profit ?? 'n/a'}, is_expired: ${contract.is_expired ?? 'n/a'}`, "system-msg");
 
     if (contract.status === "won" || contract.status === "lost") {
-        if (contract.passthrough?.bulkRunId?.startsWith("BULK_DIFF_")) {
-            if (isAutoModeTN && totalTradesExecutedTN < parseInt(maxTradesTN.value)) {
-                setTimeout(executeBulkDiffers, 1000);
-            } else if (isAutoModeTN) {
-                logToConsole("Max Differs runs reached.");
-                isAutoModeTN = false;
-                if (btnToggleAutoTN) {
-                    btnToggleAutoTN.textContent = "Auto Bulk Mode";
-                    btnToggleAutoTN.classList.remove('stream-active');
+        if (tnActiveContractIds.has(contract.contract_id)) {
+            tnActiveContractIds.delete(contract.contract_id);
+            tnBatchOpenCount = Math.max(0, tnBatchOpenCount - 1);
+
+            if (tnBatchOpenCount === 0) {
+                if (isAutoModeTN && totalTradesExecutedTN < parseInt(maxTradesTN.value)) {
+                    executeBulkDiffers();
+                } else if (isAutoModeTN) {
+                    logToConsole("Max Differs runs reached.");
+                    isAutoModeTN = false;
+                    if (btnToggleAutoTN) {
+                        btnToggleAutoTN.textContent = "Auto Bulk Mode";
+                        btnToggleAutoTN.classList.remove('stream-active');
+                    }
                 }
             }
+        }
+        if (over2ActiveContractIds.has(contract.contract_id)) {
+            over2ActiveContractIds.delete(contract.contract_id);
+            over2BatchOpenCount = Math.max(0, over2BatchOpenCount - 1);
+            if (over2BatchOpenCount === 0) bulkOver2Cooldown = false;
+        }
+        if (patternOuActiveContractIds.has(contract.contract_id)) {
+            patternOuActiveContractIds.delete(contract.contract_id);
+            patternCooldown = false;
         }
     }
 
@@ -1147,6 +1171,7 @@ function executeBulkDiffers() {
     const batchSize = parseInt(maxTradesTN.value, 10) || 1; // Max Trades Cap doubles as "repeat this many times on this same tick", same pattern as Bulk Over/Under
     const bulkRunToken = "BULK_DIFF_" + Date.now();
     challengeBatchExpectedCounts[bulkRunToken] = batchSize;
+    tnBatchOpenCount = batchSize;
 
     const baseParams = {
         "amount": stake,
