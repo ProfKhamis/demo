@@ -468,6 +468,7 @@ input:focus, select:focus {
 .system-msg { color: var(--text-secondary); }
 .success-msg { color: var(--accent-green); }
 .error-msg { color: var(--accent-red); }
+.warning-msg { color: #f2b84d; }
 
 button:disabled, select:disabled, input:disabled {
     opacity: 0.5;
